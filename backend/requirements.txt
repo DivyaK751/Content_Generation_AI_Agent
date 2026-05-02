@@ -1,0 +1,13 @@
+fastapi
+uvicorn[standard]
+google-auth
+google-auth-oauthlib
+google-cloud-bigquery
+google-cloud-storage
+google-cloud-aiplatform
+google-genai
+python-jose[cryptography]
+pydantic-settings
+httpx
+python-multipart
+langgraph
