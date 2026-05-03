@@ -359,31 +359,53 @@ function ColorsSection({ data }: { data: BrandKitData }) {
   const parsed = (() => {
     try { return JSON.parse(data.brand_colors ?? '{}') } catch { return {} }
   })()
-  const [primary, setPrimary] = useState(parsed.primary ?? '#4F46E5')
-  const [secondary, setSecondary] = useState(parsed.secondary ?? '#E0E7FF')
+
+  const defaults = ['#4F46E5', '#E0E7FF', '#F59E0B', '#10B981']
+  const initColors = (): [string, string, string, string] => {
+    if (Array.isArray(parsed.colors) && parsed.colors.length >= 4) {
+      return parsed.colors.slice(0, 4) as [string, string, string, string]
+    }
+    // migrate legacy primary/secondary
+    return [parsed.primary ?? defaults[0], parsed.secondary ?? defaults[1], defaults[2], defaults[3]]
+  }
+
+  const [colors, setColors] = useState<[string, string, string, string]>(initColors)
   const [saving, setSaving] = useState(false)
+
+  function setColor(index: number, value: string) {
+    setColors(prev => { const next = [...prev] as [string, string, string, string]; next[index] = value; return next })
+  }
 
   async function handleSave() {
     setSaving(true)
-    try { await saveBrandKit({ brand_colors: JSON.stringify({ primary, secondary }) }) }
+    try { await saveBrandKit({ brand_colors: JSON.stringify({ colors }) }) }
     finally { setSaving(false) }
   }
 
+  const labels = ['Colour 1', 'Colour 2', 'Colour 3', 'Colour 4']
+
   return (
     <div className="space-y-6">
-      {([['Primary Colour', primary, setPrimary], ['Secondary Colour', secondary, setSecondary]] as [string, string, (v: string) => void][]).map(([label, value, set]) => (
-        <div key={label}>
-          <Label>{label}</Label>
-          <div className="flex items-center gap-4 mt-1">
-            <input type="color" value={value} onChange={e => set(e.target.value)}
-              className="w-12 h-12 rounded-xl border border-gray-200 cursor-pointer p-1 bg-white flex-shrink-0" />
-            <TextInput value={value} onChange={set} placeholder="#000000" />
+      <p className="text-sm text-gray-500">Add up to 4 brand colours. Each campaign will pick one as its palette anchor.</p>
+      <div className="grid grid-cols-2 gap-4">
+        {colors.map((value, i) => (
+          <div key={i}>
+            <Label>{labels[i]}</Label>
+            <div className="flex items-center gap-3 mt-1">
+              <input type="color" value={value} onChange={e => setColor(i, e.target.value)}
+                className="w-12 h-12 rounded-xl border border-gray-200 cursor-pointer p-1 bg-white flex-shrink-0" />
+              <TextInput value={value} onChange={v => setColor(i, v)} placeholder="#000000" />
+            </div>
           </div>
-        </div>
-      ))}
+        ))}
+      </div>
       <div>
-        <Label>Gradient Preview</Label>
-        <div className="h-14 rounded-xl" style={{ background: `linear-gradient(135deg, ${primary}, ${secondary})` }} />
+        <Label>Palette Preview</Label>
+        <div className="flex h-14 rounded-xl overflow-hidden">
+          {colors.map((c, i) => (
+            <div key={i} className="flex-1" style={{ background: c }} />
+          ))}
+        </div>
       </div>
       <SaveButton onClick={handleSave} saving={saving} />
     </div>
@@ -396,6 +418,9 @@ function GuidelinesSection({ data }: { data: BrandKitData }) {
   const [tone, setTone] = useState(data.tone ?? 'Warm & Friendly')
   const [imageStyle, setImageStyle] = useState(data.image_style ?? 'Lifestyle Photography')
   const [language, setLanguage] = useState(data.language ?? 'English')
+  const [brandFont, setBrandFont] = useState(data.brand_font ?? '')
+  const [taglineFont, setTaglineFont] = useState(data.tagline_font ?? '')
+  const [bodyFont, setBodyFont] = useState(data.body_font ?? '')
   const [contentTypes, setContentTypes] = useState<string[]>(
     data.content_types ? data.content_types.split(',').map(s => s.trim()).filter(Boolean) : []
   )
@@ -409,6 +434,7 @@ function GuidelinesSection({ data }: { data: BrandKitData }) {
     try {
       await saveBrandKit({
         tagline, tone, image_style: imageStyle, language,
+        brand_font: brandFont, tagline_font: taglineFont, body_font: bodyFont,
         content_types: contentTypes.join(', '), guidelines: avoidTopics,
       })
     } finally { setSaving(false) }
@@ -417,6 +443,28 @@ function GuidelinesSection({ data }: { data: BrandKitData }) {
   return (
     <div className="space-y-5">
       <div><Label>Brand Tagline</Label><TextInput value={tagline} onChange={setTagline} placeholder="Your brand's key message" /></div>
+      <div>
+        <Label>Brand Fonts</Label>
+        <p className="text-xs text-gray-400 mb-2">These fonts will be used when generating images so your brand text looks consistent.</p>
+        <div className="grid grid-cols-3 gap-3">
+          {([
+            ['Brand name font', brandFont, setBrandFont],
+            ['Tagline font', taglineFont, setTaglineFont],
+            ['Body / other text font', bodyFont, setBodyFont],
+          ] as [string, string, (v: string) => void][]).map(([label, value, set]) => (
+            <div key={label}>
+              <Label>{label}</Label>
+              <SelectInput value={value} onChange={set} options={[
+                '',
+                'Dancing Script', 'Great Vibes',
+                'Cormorant Garamond', 'Playfair Display', 'Lora', 'Merriweather',
+                'Montserrat Bold', 'Raleway', 'Lato Light', 'Open Sans', 'Roboto', 'Nunito',
+                'Bebas Neue',
+              ]} />
+            </div>
+          ))}
+        </div>
+      </div>
       <div><Label>Brand Tone</Label><SelectInput value={tone} onChange={setTone} options={['Professional', 'Playful & Fun', 'Warm & Friendly', 'Bold & Energetic', 'Luxurious & Premium', 'Minimal & Clean']} /></div>
       <div><Label>Image Style Preference</Label><SelectInput value={imageStyle} onChange={setImageStyle} options={['Photorealistic', 'Illustrated / Artistic', 'Bold text-heavy', 'Minimal & clean', 'Vibrant & colorful']} /></div>
       <div><Label>Content Language</Label><SelectInput value={language} onChange={setLanguage} options={['English', 'Hindi', 'Spanish', 'French', 'Arabic', 'Portuguese', 'Mandarin']} /></div>

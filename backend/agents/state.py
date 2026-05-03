@@ -39,3 +39,28 @@ class GraphState(TypedDict, total=False):
 
     # Publisher output
     publish_result: dict
+
+    # Supervisor clarify loop
+    clarify_round: int          # incremented each time supervisor_clarify fires
+    is_off_topic: bool
+    follow_up_needed: bool
+    follow_up_question: Optional[str]
+    redirect_message: Optional[str]
+
+    # Image edit mode — URL of image selected for user refine (None = edit all)
+    selected_image_for_refine: Optional[str]
+
+    # skip_approval removed — all images always go through approval now
+
+    # Chatbot layer — greeting / small-talk response generated inline by supervisor
+    is_chat: bool
+    chat_response: Optional[str]
+
+    # Set by content_generator so approval can run a focused check
+    # last_refine_instruction: the user's refine text (empty = approval-retry path)
+    # last_edited_image_index: index in generated_images that was edited (None = all)
+    last_refine_instruction: str
+    last_edited_image_index: Optional[int]
+
+    # Human review chat loop — set by human_review_node, answered by human_review_chat_node
+    chat_question: Optional[str]

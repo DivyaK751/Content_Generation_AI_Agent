@@ -16,6 +16,30 @@ _client = genai.Client(vertexai=True, project=settings.GCP_PROJECT_ID, location=
 _MODEL = "gemini-2.5-pro"
 _SEARCH_TOOL = types.Tool(google_search=types.GoogleSearch())
 
+_BRAND_ANGLE_PROMPT = """You are a creative director crafting a brand-first marketing campaign.
+
+BRAND: {business_name} ({industry})
+DESCRIPTION: {description}
+TONE: {tone}
+TARGET AUDIENCE: {target_audience}
+
+CURRENT TREND: {trend_title}
+TREND CONTEXT: {trend_description}
+
+This brand wants to ride this trend to market their specific offerings. The trend is the hook — the brand is the hero.
+
+Generate three things:
+1. brand_angle: 2-3 sentences explaining exactly how this brand's specific offerings connect to this trend. Be concrete — infer what the brand sells from the industry and description. Do NOT use generic words like "products" or "services". Show how the brand benefits from the trend.
+2. headline: 2-3 short punchy lines of ad copy to display on the image. Brand-first, action-oriented. Rules: no markdown, no asterisks, no hashtags, no placeholder text, no instruction labels. Must be grammatically correct, naturally phrased, and spell-checked. Each line 3-7 words max.
+3. visual_direction: 2-3 sentences describing the VISUAL SCENE the image should depict to evoke this trend. Describe the setting, atmosphere, lighting, character poses, props, and visual motifs that make the trend recognisable. Be specific and painterly — enough for an image model to generate the right scene. Do NOT mention the brand or products here — only the visual world of the trend.
+
+Return ONLY JSON, no markdown:
+{{
+  "brand_angle": "...",
+  "headline": "Line 1\\nLine 2\\nLine 3",
+  "visual_direction": "..."
+}}"""
+
 _PROMPT = """You are a social media trend analyst helping a small business create relevant Instagram content.
 
 TODAY: {date}
@@ -72,6 +96,34 @@ def _extract_json(text: str) -> list[dict]:
             pass
 
     raise ValueError(f"Could not parse JSON array from response:\n{text[:400]}")
+
+
+def _generate_brand_angle(trend: dict, state: GraphState) -> dict:
+    ctx = state["user_context"]
+    logger.info(f"[TREND SELECT ▶] Generating brand angle for {trend.get('title')!r}")
+    prompt = _BRAND_ANGLE_PROMPT.format(
+        business_name=ctx.business_name or "the business",
+        industry=ctx.industry or "general",
+        description=ctx.description or "",
+        tone=ctx.tone or "Professional",
+        target_audience=ctx.target_audience or "general audience",
+        trend_title=trend.get("title", ""),
+        trend_description=trend.get("description", ""),
+    )
+    try:
+        response = _client.models.generate_content(
+            model=_MODEL,
+            contents=prompt,
+            config=types.GenerateContentConfig(
+                response_mime_type="application/json", temperature=0.4
+            ),
+        )
+        result = json.loads(response.text)
+        trend = {**trend, **result}
+        logger.info(f"[TREND SELECT ▶] Brand angle: {result.get('brand_angle', '')[:80]!r}")
+    except Exception as exc:
+        logger.warning(f"[TREND SELECT ▶] Brand angle generation failed ({exc}) — using trend description")
+    return trend
 
 
 def _fetch(state: GraphState, count: int = 6) -> list[dict]:
@@ -195,5 +247,6 @@ def trend_select_node(state: GraphState) -> dict:
         selected = trends[0] if trends else {}
 
     logger.info(f"[TREND SELECT ▶] User selected: {selected.get('title')!r}")
+    selected = _generate_brand_angle(selected, state)
     logger.info("[TREND SELECT ▶] Node complete")
     return {"selected_trend": selected, "fetch_more_trends": False}

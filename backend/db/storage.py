@@ -40,6 +40,16 @@ def upload_generated_image(image_bytes: bytes, user_id: str) -> str:
     return _public_url(blob_name)
 
 
+def read_gcs_bytes(gcs_url: str) -> tuple[bytes, str]:
+    """Download a file from GCS using authenticated client. Returns (bytes, mime_type)."""
+    prefix = f"https://storage.googleapis.com/{settings.GCS_BUCKET_NAME}/"
+    blob_name = gcs_url[len(prefix):] if gcs_url.startswith(prefix) else gcs_url
+    blob = _bucket.blob(blob_name)
+    blob.reload()
+    mime_type = blob.content_type or "image/png"
+    return blob.download_as_bytes(), mime_type
+
+
 def delete_file(gcs_url: str) -> None:
     """Delete a GCS object given its public HTTPS URL. Silently ignores missing blobs."""
     prefix = f"https://storage.googleapis.com/{settings.GCS_BUCKET_NAME}/"

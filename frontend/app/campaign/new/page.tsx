@@ -48,6 +48,7 @@ interface InterruptData {
   generated_captions?: string[]
   generated_emails?: EmailOption[]
   approval_result?: object
+  chat_response?: string
 }
 interface ApiResponse {
   thread_id?: string
@@ -161,7 +162,9 @@ function ContentMessage({ contentData, onSelect, selectedUrl, selectedEmailSubje
   return (
     <div className="space-y-3">
       <p className="text-sm text-gray-600">
-        {hasImages && hasEmails
+        {!hasImages && !hasEmails
+          ? 'No content was generated — the image prompt may have been filtered. Please try a new campaign.'
+          : hasImages && hasEmails
           ? 'Here are your options — click any card to preview.'
           : hasImages
           ? 'Here are your image options — click any to preview.'
@@ -401,7 +404,7 @@ function ImagePanel({ content, allCaptions, allEmails, onClose, onRefine, onPrev
   allCaptions: string[]
   allEmails: EmailOption[]
   onClose: () => void
-  onRefine: () => void
+  onRefine: (imageUrl: string) => void
   onPreview: (selected: SelectedContent) => void
 }) {
   const hasImage = !!content.image_url
@@ -530,7 +533,7 @@ function ImagePanel({ content, allCaptions, allEmails, onClose, onRefine, onPrev
       {/* Actions */}
       <div className="px-5 pb-5 pt-4 border-t border-gray-100 grid grid-cols-2 gap-3 flex-shrink-0">
         <button
-          onClick={onRefine}
+          onClick={() => onRefine(content.image_url)}
           className="flex items-center justify-center gap-1.5 border border-gray-200 text-gray-700 py-2.5 rounded-xl text-sm font-medium hover:bg-gray-50 transition-colors"
         >
           <Wand2 className="w-4 h-4" /> Refine it
@@ -731,6 +734,7 @@ export default function NewCampaignPage() {
   const [chatMode, setChatMode] = useState<'convo' | 'refining'>('convo')
   const [stage, setStage] = useState<'chatting' | 'content-shown' | 'finalizing'>('chatting')
   const [selectedContent, setSelectedContent] = useState<SelectedContent | null>(null)
+  const [refineImageUrl, setRefineImageUrl] = useState<string | null>(null)
   // ID of the most recently added trend message — only that one is interactive
   const [activeTrendMsgId, setActiveTrendMsgId] = useState<string | null>(null)
   // All captions/emails from the latest human_review for the panel picker
@@ -779,17 +783,23 @@ export default function NewCampaignPage() {
       const msgId = addMsg({ from: 'ai', kind: 'trends', trendOptions: data.trend_options, isActiveTrendMsg: true })
       setActiveTrendMsgId(msgId)
     } else if (data.type === 'human_review') {
-      addMsg({
-        from: 'ai', kind: 'content',
-        contentData: {
-          images: data.generated_images ?? [],
-          captions: data.generated_captions ?? [],
-          emails: data.generated_emails ?? [],
-        },
-      })
-      setPanelCaptions(data.generated_captions ?? [])
-      setPanelEmails(data.generated_emails ?? [])
-      setStage('content-shown')
+      if (data.chat_response) {
+        // Bot answered a chat question — just show the reply, keep the content panel as-is
+        addMsg({ from: 'ai', kind: 'text', text: data.chat_response })
+      } else {
+        // Fresh content (first run or after refine) — show content cards and update panel
+        addMsg({
+          from: 'ai', kind: 'content',
+          contentData: {
+            images: data.generated_images ?? [],
+            captions: data.generated_captions ?? [],
+            emails: data.generated_emails ?? [],
+          },
+        })
+        setPanelCaptions(data.generated_captions ?? [])
+        setPanelEmails(data.generated_emails ?? [])
+        setStage('content-shown')
+      }
     }
   }
 
@@ -807,9 +817,17 @@ export default function NewCampaignPage() {
         res = await apiPost<ApiResponse>('/campaign/start', { message: text }, token)
         setThreadId(res.thread_id!)
       } else if (chatMode === 'refining') {
-        res = await apiPost<ApiResponse>('/campaign/refine', { thread_id: threadId, instruction: text }, token)
+        res = await apiPost<ApiResponse>('/campaign/refine', {
+          thread_id: threadId,
+          instruction: text,
+          selected_image_url: refineImageUrl,
+        }, token)
         setChatMode('convo')
         setSelectedContent(null)
+        setRefineImageUrl(null)
+      } else if (stage === 'content-shown') {
+        // Content is displayed — send as a chat question, not a plain reply (which would trigger publish)
+        res = await apiPost<ApiResponse>('/campaign/chat', { thread_id: threadId, message: text }, token)
       } else {
         res = await apiPost<ApiResponse>('/campaign/reply', { thread_id: threadId, reply: text }, token)
       }
@@ -863,7 +881,8 @@ export default function NewCampaignPage() {
     }
   }
 
-  const handleRefine = () => {
+  const handleRefine = (imageUrl: string) => {
+    setRefineImageUrl(imageUrl)
     setChatMode('refining')
     setSelectedContent(null)
     setTimeout(() => inputRef.current?.focus(), 100)
@@ -871,6 +890,12 @@ export default function NewCampaignPage() {
 
   const handlePublish = async (finalSelected: SelectedContent) => {
     if (!threadId) return
+    // Guard: preview modal must be open (previewContent set) before we can publish.
+    // If somehow publish is triggered without the modal, open it instead.
+    if (!previewContent) {
+      setPreviewContent(finalSelected)
+      return
+    }
     setPublishing(true)
     try {
       const token = getToken()!
@@ -907,6 +932,7 @@ export default function NewCampaignPage() {
     setChatMode('convo')
     setStage('chatting')
     setSelectedContent(null)
+    setRefineImageUrl(null)
     setActiveTrendMsgId(null)
     setPanelCaptions([])
     setPanelEmails([])

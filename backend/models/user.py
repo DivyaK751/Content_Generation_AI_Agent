@@ -17,6 +17,9 @@ class UserContext(BaseModel):
     image_url: Optional[str] = None
     tagline: Optional[str] = None
     tone: Optional[str] = None
+    brand_font: Optional[str] = None
+    tagline_font: Optional[str] = None
+    body_font: Optional[str] = None
     # Target audience
     target_audience: Optional[str] = None
     age_group: Optional[str] = None
@@ -48,6 +51,9 @@ class OnboardingForm(BaseModel):
     brand_colors: Optional[str] = None
     tagline: Optional[str] = None
     tone: Optional[str] = None
+    brand_font: Optional[str] = None
+    tagline_font: Optional[str] = None
+    body_font: Optional[str] = None
     # Section 3 — Target audience
     target_audience: Optional[str] = None
     age_group: Optional[str] = None

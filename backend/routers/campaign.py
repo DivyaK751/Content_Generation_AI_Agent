@@ -73,10 +73,15 @@ class ReplyRequest(BaseModel):
 class RefineRequest(BaseModel):
     thread_id: str
     instruction: str
+    selected_image_url: str | None = None
 
 class PublishRequest(BaseModel):
     thread_id: str
     selected: dict  # {image_url, caption, email}
+
+class ChatRequest(BaseModel):
+    thread_id: str
+    message: str
 
 
 # ── Endpoints ──────────────────────────────────────────────────────────────────
@@ -122,7 +127,24 @@ def refine_campaign(
     if not graph.get_state(config).values:
         raise HTTPException(404, "Campaign thread not found")
     result = _run(
-        Command(resume={"action": "refine", "instruction": body.instruction}),
+        Command(resume={"action": "refine", "instruction": body.instruction,
+                        "selected_image_url": body.selected_image_url}),
+        config,
+    )
+    return {"thread_id": body.thread_id, **result}
+
+
+@router.post("/campaign/chat")
+def chat_during_review(
+    body: ChatRequest,
+    current_user: UserContext = Depends(get_current_user),
+):
+    """User sent a chat message while reviewing content — answer without publishing."""
+    config = _config(body.thread_id, current_user.user_id)
+    if not graph.get_state(config).values:
+        raise HTTPException(404, "Campaign thread not found")
+    result = _run(
+        Command(resume={"action": "chat", "message": body.message}),
         config,
     )
     return {"thread_id": body.thread_id, **result}

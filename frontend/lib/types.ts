@@ -90,6 +90,9 @@ export interface BrandKitData {
   image_url?: string
   tagline?: string
   tone?: string
+  brand_font?: string
+  tagline_font?: string
+  body_font?: string
   target_audience?: string
   age_group?: string           // comma-separated e.g. "25–34, 35–44"
   gender?: string

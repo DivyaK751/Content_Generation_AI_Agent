@@ -34,6 +34,9 @@ class BrandKitUpdate(BaseModel):
     instagram_handle: Optional[str] = None
     instagram_page_id: Optional[str] = None
     instagram_access_token: Optional[str] = None
+    brand_font: Optional[str] = None
+    tagline_font: Optional[str] = None
+    body_font: Optional[str] = None
     sender_name: Optional[str] = None
     sender_email: Optional[str] = None
     sendgrid_api_key: Optional[str] = None
