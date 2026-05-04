@@ -86,10 +86,10 @@ npm run dev   # http://localhost:3000
 | &nbsp;&nbsp;└ *Product Clarify* | | When the brand kit has multiple products, asks which one to feature in this campaign. |
 | **Trend Analyzer** | `backend/agents/trend_analyzer.py` | Uses Gemini + live Google Search to find 6 trending topics relevant to the business. Presents them to the user, waits for a pick, then translates the chosen trend into a creative direction (headline, visual style, brand angle). |
 | **Content Generator** | `backend/agents/content_generator.py` | The creative engine. Takes the brand kit and the chosen trend or occasion and runs 3 internal sub-agents in parallel. If the approval agent rejects any item, it regenerates only the flagged ones using the feedback provided. |
-| &nbsp;&nbsp;└ *Image Agent* | | Calls Imagen 4.0 to generate 3 brand-styled images; switches to Gemini Flash image editing on refinement retries. |
+| &nbsp;&nbsp;└ *Image Agent* | | Uses Gemini 2.5 Flash as the primary model to generate 3 brand-styled images (requires a logo URL). Falls back to Imagen 4.0 when no brand asset is available or Flash fails. |
 | &nbsp;&nbsp;└ *Caption Agent* | | Uses Gemini 2.5 Pro to write 3 Instagram captions with hashtags, tone-matched to the brand kit. |
 | &nbsp;&nbsp;└ *Email Agent* | | Uses Gemini 2.5 Pro to draft 3 emails, each with a subject line and body, ready for SendGrid. |
-| **Approval** | `backend/agents/approval.py` | Automatically grades every piece of content before the user sees it. Uses Gemini 2.5 Pro as a judge — hard fails anything missing the logo or brand name, then scores tone, relevance, and safety. Failed content goes back to the generator with specific fix instructions (up to 5 retries). |
+| **Approval** | `backend/agents/approval.py` | Automatically grades every piece of content before the user sees it. Uses Gemini 2.5 Pro as the judge — Vision mode for image checks (logo presence, brand name, visual quality) and text mode for captions and emails. Hard fails anything missing the logo or brand name, then scores tone, relevance, and safety. Failed content goes back to the generator with specific fix instructions (up to 5 retries). |
 | **Human Review** | `backend/agents/human_review.py` | Pauses the pipeline and hands control to the user. The user picks their preferred image, caption, and email, or asks for a refinement. Also handles inline questions (e.g. "make the caption shorter") without restarting the whole pipeline. |
 | **Publisher** | `backend/agents/publisher.py` | Takes the user's selected content and posts it. Uploads the image to Instagram via the Meta Graph API, waits for it to finish processing, then publishes it. Sends the email via SendGrid. Saves the campaign record to BigQuery. |
 
@@ -125,7 +125,7 @@ flowchart TD
     content_generator --> img_agent & cap_agent & email_agent
 
     subgraph sub_cg["Content Generator"]
-        img_agent["Image Agent\nImagen 4.0"]
+        img_agent["Image Agent\nGemini 2.5 Flash"]
         cap_agent["Caption Agent\nGemini 2.5 Pro"]
         email_agent["Email Agent\nGemini 2.5 Pro"]
     end
