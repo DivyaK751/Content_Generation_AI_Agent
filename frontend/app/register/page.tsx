@@ -32,7 +32,7 @@ export default function RegisterPage() {
             <div className="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center">
               <Activity className="w-4 h-4 text-white" />
             </div>
-            <span className="font-bold text-gray-900">Pulse</span>
+            <span className="font-bold text-gray-900">BrandBuddy</span>
           </div>
 
           <h1 className="text-xl font-bold text-gray-900 mb-1">Create your account</h1>
@@ -95,12 +95,12 @@ export default function RegisterPage() {
             </div>
             <div>
               <p className="font-semibold text-gray-900 text-sm">Account created!</p>
-              <p className="text-xs text-gray-400">Welcome to Pulse</p>
+              <p className="text-xs text-gray-400">Welcome to BrandBuddy</p>
             </div>
           </div>
           <h2 className="text-lg font-bold text-gray-900 mb-1">Set up your workspace</h2>
           <p className="text-sm text-gray-500 leading-relaxed">
-            Complete your business profile so Pulse can generate content tailored to your brand.
+            Complete your business profile so BrandBuddy can generate content tailored to your brand.
           </p>
         </div>
 

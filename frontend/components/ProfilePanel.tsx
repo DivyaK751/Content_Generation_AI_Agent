@@ -12,7 +12,7 @@ export const BRAND_SECTIONS: { key: Section; label: string; Icon: React.Componen
   { key: 'audience',   label: 'Audience',   Icon: Users     },
   { key: 'instagram',  label: 'Instagram',  Icon: AtSign    },
   { key: 'email',      label: 'Email',      Icon: Mail      },
-  { key: 'photos',     label: 'Photos',     Icon: Camera    },
+  { key: 'photos',     label: 'Products',   Icon: Camera    },
 ]
 
 interface Props {

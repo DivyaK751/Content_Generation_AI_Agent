@@ -2,6 +2,13 @@ from pydantic import BaseModel
 from typing import Optional
 
 
+class Product(BaseModel):
+    product_id: str
+    product_name: str
+    image_url: str
+    product_theme: str
+
+
 class UserContext(BaseModel):
     user_id: str
     email: str
@@ -38,6 +45,8 @@ class UserContext(BaseModel):
     sender_name: Optional[str] = None
     sender_email: Optional[str] = None
     sendgrid_api_key: Optional[str] = None
+    # Products (loaded separately from user_products table)
+    products: list[Product] = []
 
 
 class OnboardingForm(BaseModel):

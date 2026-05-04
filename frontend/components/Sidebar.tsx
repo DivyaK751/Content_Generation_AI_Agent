@@ -3,7 +3,7 @@ import { useRouter, usePathname } from 'next/navigation'
 import { useState, useEffect } from 'react'
 import { Activity, LayoutDashboard, FolderOpen, User, LogOut, PlusCircle, Clock } from 'lucide-react'
 import { apiGet } from '@/lib/api'
-import { getToken } from '@/lib/auth'
+import { getToken, sessionsKey, clearToken } from '@/lib/auth'
 import type { StoredSession } from '@/lib/types'
 
 function initials(name: string): string {
@@ -28,21 +28,25 @@ export default function Sidebar({ onProfileClick, profilePanelOpen }: SidebarPro
   const pathname = usePathname()
   const [sessions, setSessions] = useState<StoredSession[]>([])
   const [businessName, setBusinessName] = useState<string>(
-    () => { try { return localStorage.getItem('pulse_business_name') ?? '' } catch { return '' } }
+    () => { try { return localStorage.getItem('brandbuddy_business_name') ?? '' } catch { return '' } }
   )
   const [industry, setIndustry] = useState<string>(
-    () => { try { return localStorage.getItem('pulse_business_industry') ?? '' } catch { return '' } }
+    () => { try { return localStorage.getItem('brandbuddy_business_industry') ?? '' } catch { return '' } }
   )
 
   useEffect(() => {
     function load() {
       try {
-        setSessions(JSON.parse(localStorage.getItem('pulse_sessions') ?? '[]'))
+        setSessions(JSON.parse(localStorage.getItem(sessionsKey()) ?? '[]'))
       } catch { setSessions([]) }
     }
     load()
     window.addEventListener('storage', load)
-    return () => window.removeEventListener('storage', load)
+    window.addEventListener('focus', load)
+    return () => {
+      window.removeEventListener('storage', load)
+      window.removeEventListener('focus', load)
+    }
   }, [])
 
   useEffect(() => {
@@ -52,11 +56,11 @@ export default function Sidebar({ onProfileClick, profilePanelOpen }: SidebarPro
       .then(kit => {
         if (kit.business_name) {
           setBusinessName(kit.business_name)
-          try { localStorage.setItem('pulse_business_name', kit.business_name) } catch {}
+          try { localStorage.setItem('brandbuddy_business_name', kit.business_name) } catch {}
         }
         if (kit.industry) {
           setIndustry(kit.industry)
-          try { localStorage.setItem('pulse_business_industry', kit.industry) } catch {}
+          try { localStorage.setItem('brandbuddy_business_industry', kit.industry) } catch {}
         }
       })
       .catch(() => {})
@@ -78,7 +82,7 @@ export default function Sidebar({ onProfileClick, profilePanelOpen }: SidebarPro
           <div className="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center">
             <Activity className="w-4 h-4 text-white" />
           </div>
-          <span className="font-bold text-gray-900 text-base tracking-tight">Pulse</span>
+          <span className="font-bold text-gray-900 text-base tracking-tight">BrandBuddy</span>
         </button>
       </div>
 
@@ -159,7 +163,7 @@ export default function Sidebar({ onProfileClick, profilePanelOpen }: SidebarPro
           Brand Kit
         </button>
         <button
-          onClick={() => router.push('/')}
+          onClick={() => { clearToken(); router.push('/') }}
           className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-gray-500 hover:bg-gray-50 hover:text-gray-700 transition-all"
         >
           <LogOut className="w-4 h-4 flex-shrink-0" />

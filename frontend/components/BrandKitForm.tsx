@@ -1,6 +1,7 @@
 'use client'
 import { useState, useRef, useEffect } from 'react'
-import { X, Upload, ImageIcon, Eye, EyeOff, Loader2, Trash2 } from 'lucide-react'
+import { X, Upload, ImageIcon, Eye, EyeOff, Loader2, Trash2, Plus, Pencil, Check } from 'lucide-react'
+import type { Product } from '@/lib/types'
 import { BRAND_SECTIONS, type Section } from './ProfilePanel'
 import { apiUpload, apiGet, apiPatch, apiDelete } from '@/lib/api'
 import { getToken } from '@/lib/auth'
@@ -592,38 +593,86 @@ function EmailSection({ data }: { data: BrandKitData }) {
   )
 }
 
-interface UserPhoto { photo_id: string; gcs_url: string; filename: string }
 interface UserLogo { logo_id: string; gcs_url: string; filename: string }
 
-function PhotosSection({ data }: { data: BrandKitData }) {
-  const [files, setFiles] = useState<File[]>([])
+interface EditingProduct {
+  product_id: string
+  product_name: string
+  product_theme: string
+  newFile: File | null
+  newPreview: string | null
+}
+
+function ProductsSection({ data }: { data: BrandKitData }) {
+  const [products, setProducts] = useState<Product[]>([])
+  const [loading, setLoading] = useState(true)
+  const [editing, setEditing] = useState<EditingProduct | null>(null)
   const [saving, setSaving] = useState(false)
-  const [photos, setPhotos] = useState<UserPhoto[]>([])
-  const [loadingPhotos, setLoadingPhotos] = useState(true)
-  const [confirmDelete, setConfirmDelete] = useState<UserPhoto | null>(null)
+  const [confirmDelete, setConfirmDelete] = useState<Product | null>(null)
   const [deleting, setDeleting] = useState(false)
+  // "add" form state
+  const [adding, setAdding] = useState(false)
+  const [newName, setNewName] = useState('')
+  const [newTheme, setNewTheme] = useState('#4F46E5')
+  const [newFile, setNewFile] = useState<File | null>(null)
+  const [newPreview, setNewPreview] = useState<string | null>(null)
+  const [addSaving, setAddSaving] = useState(false)
+  const addFileRef = useRef<HTMLInputElement>(null)
+  const editFileRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     const token = getToken()
-    if (!token) { setLoadingPhotos(false); return }
-    apiGet<{ photos: UserPhoto[] }>('/user-photos', token)
-      .then(res => setPhotos(res.photos))
+    if (!token) { setLoading(false); return }
+    apiGet<{ products: Product[] }>('/user-products', token)
+      .then(res => setProducts(res.products))
       .catch(() => {})
-      .finally(() => setLoadingPhotos(false))
+      .finally(() => setLoading(false))
   }, [])
 
-  async function handleSave() {
+  async function handleAdd() {
     const token = getToken()
-    if (!token || files.length === 0) return
+    if (!token || !newFile) return
+    setAddSaving(true)
+    try {
+      const fd = new FormData()
+      fd.append('product_name', newName || 'Untitled Product')
+      fd.append('product_theme', newTheme)
+      fd.append('file', newFile)
+      const res = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000'}/user-products`,
+        { method: 'POST', headers: { Authorization: `Bearer ${token}` }, body: fd }
+      )
+      const created: Product = await res.json()
+      setProducts(p => [...p, created])
+      setAdding(false)
+      setNewName(''); setNewTheme('#4F46E5')
+      if (newPreview) URL.revokeObjectURL(newPreview)
+      setNewFile(null); setNewPreview(null)
+    } finally { setAddSaving(false) }
+  }
+
+  async function handleSaveEdit() {
+    if (!editing) return
+    const token = getToken()
+    if (!token) return
     setSaving(true)
     try {
-      const uploaded: UserPhoto[] = []
-      for (const photo of files) {
-        const res = await apiUpload<{ photo_id: string; gcs_url: string }>('/photos-upload', photo, token)
-        uploaded.push({ photo_id: res.photo_id, gcs_url: res.gcs_url, filename: photo.name })
-      }
-      setPhotos(p => [...uploaded, ...p])
-      setFiles([])
+      const fd = new FormData()
+      fd.append('product_name', editing.product_name)
+      fd.append('product_theme', editing.product_theme)
+      if (editing.newFile) fd.append('file', editing.newFile)
+      await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000'}/user-products/${editing.product_id}`,
+        { method: 'PATCH', headers: { Authorization: `Bearer ${token}` }, body: fd }
+      )
+      setProducts(p => p.map(pr =>
+        pr.product_id === editing.product_id
+          ? { ...pr, product_name: editing.product_name, product_theme: editing.product_theme,
+              image_url: editing.newPreview ? editing.newPreview : pr.image_url }
+          : pr
+      ))
+      if (editing.newPreview) URL.revokeObjectURL(editing.newPreview)
+      setEditing(null)
     } finally { setSaving(false) }
   }
 
@@ -633,69 +682,180 @@ function PhotosSection({ data }: { data: BrandKitData }) {
     if (!token) return
     setDeleting(true)
     try {
-      await apiDelete(`/photo/${confirmDelete.photo_id}`, token)
-      setPhotos(p => p.filter(ph => ph.photo_id !== confirmDelete.photo_id))
+      await apiDelete(`/user-products/${confirmDelete.product_id}`, token)
+      setProducts(p => p.filter(pr => pr.product_id !== confirmDelete.product_id))
       setConfirmDelete(null)
-    } catch { /* leave modal open on error */ }
+    } catch { /* leave modal open */ }
     finally { setDeleting(false) }
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       {confirmDelete && (
         <ConfirmDeleteModal
-          label={`photo "${confirmDelete.filename}"`}
+          label={`product "${confirmDelete.product_name}"`}
           onConfirm={handleDelete}
           onCancel={() => !deleting && setConfirmDelete(null)}
           deleting={deleting}
         />
       )}
-      <p className="text-sm text-gray-500 leading-relaxed">Brand photos are used as visual references when generating images.</p>
-      <div>
-        <Label>Uploaded Photos ({photos.length})</Label>
-        {loadingPhotos ? (
-          <div className="flex items-center gap-2 text-gray-400 text-sm mt-2">
-            <Loader2 className="w-4 h-4 animate-spin" /> Loading…
+      <p className="text-sm text-gray-500 leading-relaxed">
+        Manage your products. Each product has a name, theme colour, and image used during campaign generation.
+      </p>
+
+      {loading ? (
+        <div className="flex items-center gap-2 text-gray-400 text-sm">
+          <Loader2 className="w-4 h-4 animate-spin" /> Loading…
+        </div>
+      ) : products.length === 0 && !adding ? (
+        <p className="text-sm text-gray-400">No products yet. Add your first one below.</p>
+      ) : (
+        <div className="space-y-3">
+          {products.map(pr => (
+            <div key={pr.product_id} className="border border-gray-200 rounded-xl overflow-hidden">
+              {editing?.product_id === pr.product_id ? (
+                /* ── Edit row ── */
+                <div className="p-4 space-y-3 bg-indigo-50/40">
+                  <div className="flex gap-3">
+                    {/* image thumbnail / swap */}
+                    <div className="relative w-16 h-16 rounded-xl overflow-hidden border border-gray-200 flex-shrink-0 group cursor-pointer"
+                      onClick={() => editFileRef.current?.click()}>
+                      <img
+                        src={editing.newPreview ?? toHttpsUrl(pr.image_url) ?? ''}
+                        alt={pr.product_name}
+                        className="w-full h-full object-cover"
+                      />
+                      <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                        <Upload className="w-4 h-4 text-white" />
+                      </div>
+                    </div>
+                    <input ref={editFileRef} type="file" accept="image/*" className="hidden" onChange={e => {
+                      const f = e.target.files?.[0]
+                      if (!f) return
+                      if (editing.newPreview) URL.revokeObjectURL(editing.newPreview)
+                      setEditing(ed => ed ? { ...ed, newFile: f, newPreview: URL.createObjectURL(f) } : ed)
+                      e.target.value = ''
+                    }} />
+                    <div className="flex-1 space-y-2">
+                      <input
+                        type="text"
+                        value={editing.product_name}
+                        onChange={e => setEditing(ed => ed ? { ...ed, product_name: e.target.value } : ed)}
+                        placeholder="Product name"
+                        className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-400 bg-white"
+                      />
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="color"
+                          value={editing.product_theme}
+                          onChange={e => setEditing(ed => ed ? { ...ed, product_theme: e.target.value } : ed)}
+                          className="w-8 h-8 rounded-lg border border-gray-200 cursor-pointer p-0.5 bg-white"
+                        />
+                        <span className="text-xs font-mono text-gray-500">{editing.product_theme}</span>
+                        <span className="text-xs text-gray-400 ml-1">theme colour</span>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex gap-2 justify-end">
+                    <button onClick={() => { if (editing.newPreview) URL.revokeObjectURL(editing.newPreview); setEditing(null) }}
+                      className="text-sm text-gray-500 hover:text-gray-700 px-3 py-1.5 rounded-lg border border-gray-200 hover:bg-gray-50 transition-colors">
+                      Cancel
+                    </button>
+                    <button onClick={handleSaveEdit} disabled={saving}
+                      className="flex items-center gap-1.5 text-sm font-medium bg-indigo-600 text-white px-4 py-1.5 rounded-lg hover:bg-indigo-700 transition-colors disabled:opacity-50">
+                      {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+                      Save
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                /* ── Display row ── */
+                <div className="flex items-center gap-3 p-3">
+                  <div className="w-14 h-14 rounded-xl overflow-hidden border border-gray-100 flex-shrink-0">
+                    <img src={toHttpsUrl(pr.image_url) ?? ''} alt={pr.product_name} className="w-full h-full object-cover" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-gray-800 truncate">{pr.product_name}</p>
+                    <div className="flex items-center gap-1.5 mt-0.5">
+                      <span className="inline-block w-3 h-3 rounded-full border border-gray-200" style={{ backgroundColor: pr.product_theme }} />
+                      <span className="text-xs font-mono text-gray-400">{pr.product_theme}</span>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-1 flex-shrink-0">
+                    <button onClick={() => setEditing({ product_id: pr.product_id, product_name: pr.product_name,
+                        product_theme: pr.product_theme, newFile: null, newPreview: null })}
+                      className="p-1.5 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors" title="Edit">
+                      <Pencil className="w-3.5 h-3.5" />
+                    </button>
+                    <button onClick={() => setConfirmDelete(pr)}
+                      className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors" title="Delete">
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Add product form */}
+      {adding ? (
+        <div className="border border-dashed border-indigo-300 rounded-xl p-4 space-y-3 bg-indigo-50/30">
+          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">New Product</p>
+          <input
+            type="text"
+            value={newName}
+            onChange={e => setNewName(e.target.value)}
+            placeholder="Product name"
+            className="w-full text-sm border border-gray-200 rounded-xl px-3.5 py-2.5 focus:outline-none focus:ring-2 focus:ring-indigo-400 bg-white"
+          />
+          <div className="flex items-center gap-3">
+            <input type="color" value={newTheme} onChange={e => setNewTheme(e.target.value)}
+              className="w-10 h-10 rounded-lg border border-gray-200 cursor-pointer p-0.5 bg-white" />
+            <div>
+              <span className="text-xs font-mono text-gray-500">{newTheme}</span>
+              <p className="text-xs text-gray-400">Theme colour</p>
+            </div>
           </div>
-        ) : photos.length === 0 ? (
-          <p className="text-sm text-gray-400 mt-2">No photos uploaded yet.</p>
-        ) : (
-          <div className="grid grid-cols-3 gap-3 mt-2">
-            {photos.map(ph => (
-              <div key={ph.photo_id} className="aspect-square rounded-xl overflow-hidden bg-gray-100 relative group">
-                <img
-                  src={toHttpsUrl(ph.gcs_url) ?? ''}
-                  alt={ph.filename}
-                  className="w-full h-full object-cover"
-                />
-                <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors" />
-                <button
-                  onClick={() => setConfirmDelete(ph)}
-                  className="absolute top-1.5 right-1.5 w-6 h-6 bg-red-500 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-600 shadow-sm"
-                  title="Delete photo"
-                >
-                  <X className="w-3 h-3 text-white" />
-                </button>
-                <p className="absolute bottom-0 left-0 right-0 text-xs text-white bg-black/40 px-2 py-1 truncate opacity-0 group-hover:opacity-100 transition-opacity">
-                  {ph.filename}
-                </p>
+          {newPreview ? (
+            <div className="relative w-20 h-20 rounded-xl overflow-hidden border border-gray-200 group cursor-pointer"
+              onClick={() => addFileRef.current?.click()}>
+              <img src={newPreview} alt="preview" className="w-full h-full object-cover" />
+              <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                <Upload className="w-4 h-4 text-white" />
               </div>
-            ))}
+            </div>
+          ) : (
+            <button type="button" onClick={() => addFileRef.current?.click()}
+              className="flex items-center gap-2 border border-dashed border-gray-300 rounded-xl px-4 py-2.5 text-sm text-gray-500 hover:border-indigo-400 hover:text-indigo-600 transition-colors">
+              <Upload className="w-4 h-4" /> Upload product image
+            </button>
+          )}
+          <input ref={addFileRef} type="file" accept="image/*" className="hidden" onChange={e => {
+            const f = e.target.files?.[0]
+            if (!f) return
+            if (newPreview) URL.revokeObjectURL(newPreview)
+            setNewFile(f); setNewPreview(URL.createObjectURL(f))
+            e.target.value = ''
+          }} />
+          <div className="flex gap-2 pt-1">
+            <button onClick={() => { setAdding(false); setNewName(''); setNewTheme('#4F46E5'); if (newPreview) URL.revokeObjectURL(newPreview); setNewFile(null); setNewPreview(null) }}
+              className="flex-1 border border-gray-200 text-gray-600 text-sm py-2 rounded-xl hover:bg-gray-50 transition-colors">
+              Cancel
+            </button>
+            <button onClick={handleAdd} disabled={addSaving || !newFile}
+              className="flex-1 bg-indigo-600 text-white text-sm font-medium py-2 rounded-xl hover:bg-indigo-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+              {addSaving ? 'Adding…' : 'Add Product'}
+            </button>
           </div>
-        )}
-      </div>
-      <div>
-        <Label>Upload More Photos</Label>
-        <FileUploadArea multiple hint="Click to upload one or more brand photos" files={files}
-          onAdd={f => setFiles(prev => [...prev, ...f])} onRemove={i => setFiles(p => p.filter((_, j) => j !== i))} />
-      </div>
-      <div className="pt-6 mt-2 border-t border-gray-100">
-        <button onClick={handleSave} disabled={saving || files.length === 0}
-          className="bg-indigo-600 text-white text-sm font-medium px-6 py-2.5 rounded-xl hover:bg-indigo-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
-          {saving ? 'Uploading…' : 'Save Changes'}
+        </div>
+      ) : (
+        <button onClick={() => setAdding(true)}
+          className="flex items-center gap-2 text-sm font-medium text-indigo-600 hover:text-indigo-700 border border-dashed border-indigo-300 hover:border-indigo-400 rounded-xl px-4 py-2.5 w-full justify-center transition-colors">
+          <Plus className="w-4 h-4" /> Add Product
         </button>
-        {files.length === 0 && <p className="text-xs text-gray-400 mt-2">Upload photos to enable save.</p>}
-      </div>
+      )}
     </div>
   )
 }
@@ -709,7 +869,7 @@ function SectionContent({ s, data }: { s: Section; data: BrandKitData }) {
     case 'audience':   return <AudienceSection data={data} />
     case 'instagram':  return <InstagramSection data={data} />
     case 'email':      return <EmailSection data={data} />
-    case 'photos':     return <PhotosSection data={data} />
+    case 'photos':     return <ProductsSection data={data} />
   }
 }
 

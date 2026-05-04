@@ -1,7 +1,7 @@
 'use client'
 import { useState, useRef, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { Sparkles, ChevronRight, ChevronLeft, Check, Upload, ImageIcon, X } from 'lucide-react'
+import { Sparkles, ChevronRight, ChevronLeft, Check, Upload, Plus, Trash2 } from 'lucide-react'
 import { getToken } from '@/lib/auth'
 import { apiPost, apiUpload } from '@/lib/api'
 
@@ -10,10 +10,18 @@ const STEPS = [
   'Brand Identity',
   'Target Audience',
   'Content Preferences',
-  'Product Photos',
+  'Products',
   'Instagram Setup',
   'Email Setup',
 ]
+
+interface ProductDraft {
+  id: string
+  name: string
+  theme: string
+  file: File | null
+  preview: string | null
+}
 
 const INDUSTRIES = ['Food & Beverage', 'Retail', 'Health & Wellness', 'Beauty & Skincare', 'Fashion', 'Education', 'Real Estate', 'Technology', 'Other']
 const TONES = ['Professional', 'Playful & Fun', 'Warm & Friendly', 'Bold & Energetic', 'Luxurious & Premium', 'Minimal & Clean']
@@ -82,6 +90,88 @@ function InputField({ label, placeholder, value, onChange, type = 'text', option
   )
 }
 
+function ProductDraftRow({
+  product, index, onChange, onRemove,
+}: {
+  product: ProductDraft
+  index: number
+  onChange: (patch: Partial<ProductDraft>) => void
+  onRemove: () => void
+}) {
+  const fileInputRef = useRef<HTMLInputElement>(null)
+
+  function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const f = e.target.files?.[0]
+    if (!f) return
+    if (product.preview) URL.revokeObjectURL(product.preview)
+    onChange({ file: f, preview: URL.createObjectURL(f) })
+    e.target.value = ''
+  }
+
+  return (
+    <div className="border border-gray-200 rounded-xl p-4 space-y-3 bg-gray-50">
+      <div className="flex items-center justify-between mb-1">
+        <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Product {index + 1}</span>
+        <button type="button" onClick={onRemove} className="text-gray-300 hover:text-red-400 transition-colors">
+          <Trash2 className="w-4 h-4" />
+        </button>
+      </div>
+
+      {/* Product name */}
+      <div>
+        <label className="block text-xs font-medium text-gray-600 mb-1">Product name</label>
+        <input
+          type="text"
+          value={product.name}
+          onChange={e => onChange({ name: e.target.value })}
+          placeholder="e.g. Summer Dress, Cold Brew Kit…"
+          className="w-full border border-gray-200 rounded-xl px-3.5 py-2 text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
+        />
+      </div>
+
+      {/* Theme colour */}
+      <div>
+        <label className="block text-xs font-medium text-gray-600 mb-1">Theme colour</label>
+        <div className="flex items-center gap-3">
+          <input
+            type="color"
+            value={product.theme}
+            onChange={e => onChange({ theme: e.target.value })}
+            className="w-10 h-10 rounded-lg border border-gray-200 cursor-pointer p-0.5 bg-white"
+          />
+          <span className="text-sm font-mono text-gray-500">{product.theme}</span>
+        </div>
+      </div>
+
+      {/* Product image */}
+      <div>
+        <label className="block text-xs font-medium text-gray-600 mb-1">Product image</label>
+        {product.preview ? (
+          <div className="relative w-20 h-20 rounded-xl overflow-hidden border border-gray-200 group">
+            <img src={product.preview} alt="preview" className="w-full h-full object-cover" />
+            <button
+              type="button"
+              onClick={() => { onChange({ file: null, preview: null }); if (fileInputRef.current) fileInputRef.current.value = '' }}
+              className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center"
+            >
+              <Trash2 className="w-4 h-4 text-white" />
+            </button>
+          </div>
+        ) : (
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            className="flex items-center gap-2 border border-dashed border-gray-300 rounded-xl px-4 py-2.5 text-sm text-gray-500 hover:border-indigo-300 hover:text-indigo-600 transition-colors"
+          >
+            <Upload className="w-4 h-4" /> Upload image
+          </button>
+        )}
+        <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleFile} />
+      </div>
+    </div>
+  )
+}
+
 export default function OnboardingPage() {
   const router = useRouter()
   const [step, setStep] = useState(0)
@@ -89,14 +179,29 @@ export default function OnboardingPage() {
   const [error, setError] = useState('')
   const [logoFiles, setLogoFiles] = useState<File[]>([])
   const [emailListFile, setEmailListFile] = useState<File | null>(null)
-  const [photoFiles, setPhotoFiles] = useState<File[]>([])
+  const [products, setProducts] = useState<ProductDraft[]>([])
   const logoInputRef = useRef<HTMLInputElement>(null)
   const emailListInputRef = useRef<HTMLInputElement>(null)
-  const photosInputRef = useRef<HTMLInputElement>(null)
+
+  function addProduct() {
+    setProducts(p => [...p, { id: crypto.randomUUID(), name: '', theme: '#4F46E5', file: null, preview: null }])
+  }
+
+  function updateProduct(id: string, patch: Partial<ProductDraft>) {
+    setProducts(p => p.map(pr => pr.id === id ? { ...pr, ...patch } : pr))
+  }
+
+  function removeProduct(id: string) {
+    setProducts(p => {
+      const removed = p.find(pr => pr.id === id)
+      if (removed?.preview) URL.revokeObjectURL(removed.preview)
+      return p.filter(pr => pr.id !== id)
+    })
+  }
 
   const [form, setForm] = useState({
     businessName: '', industry: '', description: '', location: '', website: '',
-    primaryColor: '#4F46E5', secondaryColor: '#E0E7FF', brandTagline: '',
+    brandColors: ['#4F46E5', '#E0E7FF', '#F59E0B', '#10B981'] as [string, string, string, string], brandTagline: '',
     brandFont: '', taglineFont: '', bodyFont: '', tone: '',
     targetCustomer: '', ageGroups: [] as string[], genderSkew: 'All genders', interests: [] as string[],
     contentTypes: [] as string[], imageStyle: '', language: 'English', avoidTopics: '',
@@ -108,7 +213,7 @@ export default function OnboardingPage() {
     if (!getToken()) router.replace('/')
   }, [router])
 
-  const set = (field: string, value: string | string[]) => setForm(prev => ({ ...prev, [field]: value }))
+  const set = (field: string, value: string | string[] | [string, string, string, string]) => setForm(prev => ({ ...prev, [field]: value }))
   const toggle = (field: string, value: string) => {
     const arr = form[field as keyof typeof form] as string[]
     set(field, arr.includes(value) ? arr.filter(v => v !== value) : [...arr, value])
@@ -126,8 +231,17 @@ export default function OnboardingPage() {
       if (emailListFile) {
         await apiUpload('/email-list-upload', emailListFile, token)
       }
-      for (const photo of photoFiles) {
-        await apiUpload('/photos-upload', photo, token)
+      for (const product of products) {
+        if (!product.file) continue
+        const fd = new FormData()
+        fd.append('product_name', product.name || 'Untitled Product')
+        fd.append('product_theme', product.theme)
+        fd.append('file', product.file)
+        await fetch(`${process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000'}/product-upload`, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token}` },
+          body: fd,
+        })
       }
       console.log('Submitting onboarding form…', form)
       await apiPost('/onboarding', {
@@ -136,7 +250,7 @@ export default function OnboardingPage() {
         description: form.description,
         location: form.location,
         website: form.website,
-        brand_colors: JSON.stringify({ primary: form.primaryColor, secondary: form.secondaryColor }),
+        brand_colors: JSON.stringify({ colors: form.brandColors }),
         tagline: form.brandTagline,
         brand_font: form.brandFont,
         tagline_font: form.taglineFont,
@@ -235,20 +349,33 @@ export default function OnboardingPage() {
           }}
         />
       </div>
-      <div className="grid grid-cols-2 gap-4">
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1.5">Primary brand color</label>
-          <div className="flex items-center gap-3 border border-gray-200 rounded-xl px-4 py-2.5">
-            <input type="color" value={form.primaryColor} onChange={e => set('primaryColor', e.target.value)} className="w-8 h-8 rounded cursor-pointer border-0 bg-transparent" />
-            <span className="text-sm text-gray-600 font-mono">{form.primaryColor}</span>
-          </div>
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-2">Brand colours <span className="text-gray-400 font-normal">(up to 4)</span></label>
+        <p className="text-xs text-gray-400 mb-3">Each campaign will pick one as its palette anchor.</p>
+        <div className="grid grid-cols-2 gap-4">
+          {(['Colour 1', 'Colour 2', 'Colour 3', 'Colour 4'] as const).map((label, i) => (
+            <div key={i}>
+              <label className="block text-xs font-medium text-gray-600 mb-1.5">{label}</label>
+              <div className="flex items-center gap-3 border border-gray-200 rounded-xl px-4 py-2.5">
+                <input
+                  type="color"
+                  value={form.brandColors[i]}
+                  onChange={e => {
+                    const next = [...form.brandColors] as [string, string, string, string]
+                    next[i] = e.target.value
+                    set('brandColors', next)
+                  }}
+                  className="w-8 h-8 rounded cursor-pointer border-0 bg-transparent"
+                />
+                <span className="text-sm text-gray-600 font-mono">{form.brandColors[i]}</span>
+              </div>
+            </div>
+          ))}
         </div>
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1.5">Secondary color <span className="text-gray-400 font-normal">(optional)</span></label>
-          <div className="flex items-center gap-3 border border-gray-200 rounded-xl px-4 py-2.5">
-            <input type="color" value={form.secondaryColor} onChange={e => set('secondaryColor', e.target.value)} className="w-8 h-8 rounded cursor-pointer border-0 bg-transparent" />
-            <span className="text-sm text-gray-600 font-mono">{form.secondaryColor}</span>
-          </div>
+        <div className="mt-3 flex h-10 rounded-xl overflow-hidden">
+          {form.brandColors.map((c, i) => (
+            <div key={i} className="flex-1" style={{ background: c }} />
+          ))}
         </div>
       </div>
       <InputField label="Brand tagline / slogan" placeholder="e.g. Every cup tells a story" value={form.brandTagline} onChange={v => set('brandTagline', v)} optional />
@@ -381,60 +508,28 @@ export default function OnboardingPage() {
       </div>
     </div>,
 
-    // Step 4 — Product Photos
+    // Step 4 — Products
     <div key={4} className="space-y-5">
       <p className="text-sm text-gray-500 leading-relaxed">
-        Upload product shots, store photos, or lifestyle images. These are used as visual references when generating campaign images.
+        Add your products. Each product needs a name, an image, and a theme colour. These are used when generating campaign images.
       </p>
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1.5">
-          Product photos <span className="text-gray-400 font-normal">(optional — select multiple)</span>
-        </label>
-        <div
-          onClick={() => photosInputRef.current?.click()}
-          className="border-2 border-dashed border-gray-200 rounded-xl p-6 flex flex-col items-center gap-2 hover:border-indigo-300 cursor-pointer transition-colors"
-        >
-          <Upload className="w-5 h-5 text-gray-400" />
-          <span className="text-sm text-gray-500">
-            Drop photos here or <span className="text-indigo-600 font-medium">browse</span>
-          </span>
-          <span className="text-xs text-gray-400">PNG, JPG · up to 10 MB each</span>
-        </div>
-        <input
-          ref={photosInputRef}
-          type="file"
-          accept="image/*"
-          multiple
-          className="hidden"
-          onChange={e => {
-            if (e.target.files) {
-              const selected = Array.from(e.target.files)
-              setPhotoFiles(p => [...p, ...selected])
-              e.target.value = ''
-            }
-          }}
+      {products.map((product, idx) => (
+        <ProductDraftRow
+          key={product.id}
+          product={product}
+          index={idx}
+          onChange={patch => updateProduct(product.id, patch)}
+          onRemove={() => removeProduct(product.id)}
         />
-        {photoFiles.length > 0 && (
-          <div className="mt-3 space-y-2">
-            {photoFiles.map((f, i) => (
-              <div key={i} className="flex items-center gap-3 px-4 py-2.5 bg-gray-50 rounded-xl border border-gray-100">
-                <ImageIcon className="w-4 h-4 text-indigo-400 flex-shrink-0" />
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-gray-700 truncate">{f.name}</p>
-                  <p className="text-xs text-gray-400">{(f.size / 1024).toFixed(1)} KB</p>
-                </div>
-                <button
-                  type="button"
-                  onClick={e => { e.stopPropagation(); setPhotoFiles(p => p.filter((_, j) => j !== i)) }}
-                  className="text-gray-300 hover:text-red-400 transition-colors"
-                >
-                  <X className="w-4 h-4" />
-                </button>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
+      ))}
+      <button
+        type="button"
+        onClick={addProduct}
+        className="flex items-center gap-2 text-sm font-medium text-indigo-600 hover:text-indigo-700 border border-dashed border-indigo-300 hover:border-indigo-400 rounded-xl px-4 py-2.5 w-full justify-center transition-colors"
+      >
+        <Plus className="w-4 h-4" />
+        Add Product
+      </button>
     </div>,
 
     // Step 5 — Instagram Setup

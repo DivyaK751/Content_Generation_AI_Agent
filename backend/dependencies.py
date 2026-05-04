@@ -2,8 +2,8 @@ from fastapi import Depends, HTTPException
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from jose import JWTError, jwt
 from config import settings
-from db.bigquery import get_user
-from models.user import UserContext
+from db.bigquery import get_user, get_user_products
+from models.user import UserContext, Product
 from cache import get_cached_user, set_cached_user
 
 _security = HTTPBearer()
@@ -34,5 +34,8 @@ def get_current_user(
 
     valid = UserContext.model_fields.keys()
     ctx = UserContext(**{k: v for k, v in row.items() if k in valid})
+    # Load products separately — not stored in the main users table
+    product_rows = get_user_products(user_id)
+    ctx = ctx.model_copy(update={"products": [Product(**p) for p in product_rows]})
     set_cached_user(ctx)
     return ctx

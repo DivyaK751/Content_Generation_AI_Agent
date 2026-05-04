@@ -20,6 +20,7 @@ BUSINESS: {business_name} ({industry})
 BRAND TONE: {tone}
 CAMPAIGN THEME: {theme}
 BRAND COLORS: {brand_colors}
+FEATURED PRODUCTS (intentionally included in this campaign): {featured_products}
 
 Evaluate this image for Instagram marketing use.
 
@@ -30,6 +31,10 @@ Return ONLY a raw JSON object (no markdown):
   "issues": ["issue 1", "issue 2"],
   "notes": "brief overall assessment"
 }}
+
+IMPORTANT — FEATURED PRODUCTS: If {featured_products} is not "none", the listed products ARE intentionally
+part of this campaign advertisement. Do NOT flag them as unrelated, confusing, or irrelevant — their presence
+is correct and expected. Only flag products that are NOT in the featured products list.
 
 HARD FAILURE RULES — if any of these are true, set passed=false and score <= 40, regardless of everything else:
 - The brand logo graphic is absent from the image (no recognisable logo icon/graphic visible)
@@ -170,7 +175,7 @@ def _check_image_refine(image_url: str, refine_instruction: str) -> dict:
         return {"passed": True, "score": 80, "issues": [], "notes": f"Check skipped: {exc}"}
 
 
-def _check_image(image_url: str, ctx, theme: str) -> dict:
+def _check_image(image_url: str, ctx, theme: str, featured_products: list[str] | None = None) -> dict:
     try:
         logger.info(f"[APPROVAL ▶] Checking image: {image_url[:70]}...")
         image_bytes = httpx.get(image_url, timeout=15, follow_redirects=True).content
@@ -187,12 +192,14 @@ def _check_image(image_url: str, ctx, theme: str) -> dict:
         except Exception:
             color_desc = ctx.brand_colors or "not specified"
 
+        products_str = ", ".join(featured_products) if featured_products else "none"
         prompt = _IMAGE_CHECK_PROMPT.format(
             business_name=ctx.business_name,
             industry=ctx.industry or "general",
             tone=ctx.tone or "Professional",
             theme=theme,
             brand_colors=color_desc,
+            featured_products=products_str,
         )
 
         response = _client.models.generate_content(
@@ -275,6 +282,16 @@ def approval_node(state: GraphState) -> dict:
     brief = state.get("selected_trend") or state.get("occasion_brief") or {}
     theme = brief.get("title") or brief.get("event", "campaign")
 
+    # Product mode: tell the approval agent which products are intentionally featured
+    use_product = state.get("use_product", False)
+    selected_products = state.get("selected_products", [])
+    featured_product_names = (
+        [p.get("product_name", "") for p in selected_products if p.get("product_name")]
+        if use_product and selected_products else []
+    )
+    if featured_product_names:
+        logger.info(f"[APPROVAL ▶] Product mode — featured products: {featured_product_names}")
+
     # Determine check mode:
     # 1. user_refine: user gave an explicit refine instruction → focused check on that one image only
     # 2. approval_retry: approval previously failed → focused check against previous per-item issues
@@ -318,7 +335,7 @@ def approval_node(state: GraphState) -> dict:
                 else:
                     result = {"passed": True, "score": 85, "issues": [], "notes": "No issues from previous run"}
             else:
-                result = _normalize_result(_check_image(url, ctx, theme))
+                result = _normalize_result(_check_image(url, ctx, theme, featured_products=featured_product_names))
 
             item = {"type": "image", "url": url, **result}
             item["edit_instruction"] = (

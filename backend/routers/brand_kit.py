@@ -1,12 +1,18 @@
 import logging
-from fastapi import APIRouter, Depends, HTTPException
+import uuid
+from fastapi import APIRouter, Depends, Form, HTTPException, UploadFile, File
 from pydantic import BaseModel
+from starlette.concurrency import run_in_threadpool
 from typing import Optional
 
-from db.bigquery import get_user, update_user, get_user_photos, get_user_logos, delete_user_logo, delete_user_photo
-from db.storage import delete_file
+from db.bigquery import (
+    get_user, update_user,
+    get_user_photos, get_user_logos, delete_user_logo, delete_user_photo,
+    get_user_products, insert_user_product, update_user_product, delete_user_product,
+)
+from db.storage import delete_file, upload_photo
 from dependencies import get_current_user
-from models.user import UserContext
+from models.user import UserContext, Product
 from cache import invalidate_user, set_cached_user
 
 logger = logging.getLogger(__name__)
@@ -50,6 +56,9 @@ def get_brand_kit(current_user: UserContext = Depends(get_current_user)):
         return current_user
     valid = UserContext.model_fields.keys()
     fresh = UserContext(**{k: v for k, v in row.items() if k in valid})
+    # Load products too — they're not in the users table
+    product_rows = get_user_products(current_user.user_id)
+    fresh = fresh.model_copy(update={"products": [Product(**p) for p in product_rows]})
     set_cached_user(fresh)
     return fresh
 
@@ -107,6 +116,70 @@ def delete_photo(
         delete_file(gcs_url)
     except Exception as exc:
         logger.warning(f"GCS delete failed for {gcs_url}: {exc} — row already deleted from BigQuery")
+    return {"status": "ok"}
+
+
+@router.get("/user-products")
+def list_user_products(current_user: UserContext = Depends(get_current_user)):
+    rows = get_user_products(current_user.user_id)
+    for p in rows:
+        url: str = p.get("image_url", "")
+        if url.startswith("gs://"):
+            p["image_url"] = url.replace("gs://", "https://storage.googleapis.com/", 1)
+        if p.get("created_at"):
+            p["created_at"] = p["created_at"].isoformat()
+    return {"products": rows}
+
+
+@router.post("/user-products")
+async def create_product(
+    product_name: str = Form(...),
+    product_theme: str = Form(...),
+    file: UploadFile = File(...),
+    current_user: UserContext = Depends(get_current_user),
+):
+    contents = await file.read()
+    image_url = await run_in_threadpool(upload_photo, contents, file.content_type, current_user.user_id)
+    product_id = str(uuid.uuid4())
+    await run_in_threadpool(
+        insert_user_product, product_id, current_user.user_id, product_name, image_url, product_theme
+    )
+    invalidate_user(current_user.user_id)
+    return {"product_id": product_id, "image_url": image_url, "product_name": product_name, "product_theme": product_theme}
+
+
+@router.patch("/user-products/{product_id}")
+async def edit_product(
+    product_id: str,
+    product_name: str = Form(...),
+    product_theme: str = Form(...),
+    file: Optional[UploadFile] = File(None),
+    current_user: UserContext = Depends(get_current_user),
+):
+    new_image_url: Optional[str] = None
+    if file and file.filename:
+        contents = await file.read()
+        new_image_url = await run_in_threadpool(upload_photo, contents, file.content_type, current_user.user_id)
+    await run_in_threadpool(
+        update_user_product, product_id, current_user.user_id, product_name, product_theme, new_image_url
+    )
+    invalidate_user(current_user.user_id)
+    return {"status": "ok"}
+
+
+@router.delete("/user-products/{product_id}")
+def remove_product(
+    product_id: str,
+    current_user: UserContext = Depends(get_current_user),
+):
+    image_url = delete_user_product(product_id, current_user.user_id)
+    if image_url is None:
+        raise HTTPException(404, "Product not found")
+    try:
+        delete_file(image_url)
+    except Exception as exc:
+        logger.warning(f"GCS delete failed for {image_url}: {exc} — row already deleted from BigQuery")
+    invalidate_user(current_user.user_id)
     return {"status": "ok"}
 
 

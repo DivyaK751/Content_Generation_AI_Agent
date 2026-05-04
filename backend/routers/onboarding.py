@@ -1,8 +1,8 @@
 import uuid
-from fastapi import APIRouter, BackgroundTasks, Depends, UploadFile, File
+from fastapi import APIRouter, BackgroundTasks, Depends, Form, UploadFile, File
 from starlette.concurrency import run_in_threadpool
 
-from db.bigquery import update_user, insert_user_photo, insert_user_logo
+from db.bigquery import update_user, insert_user_photo, insert_user_logo, insert_user_product
 from db.storage import upload_logo, upload_email_list, upload_photo
 from dependencies import get_current_user
 from models.user import OnboardingForm, UserContext
@@ -47,6 +47,22 @@ async def upload_photo_endpoint(
     photo_id = str(uuid.uuid4())
     await run_in_threadpool(insert_user_photo, photo_id, current_user.user_id, gcs_url, file.filename or "")
     return {"photo_id": photo_id, "gcs_url": gcs_url}
+
+
+@router.post("/product-upload")
+async def upload_product_endpoint(
+    product_name: str = Form(...),
+    product_theme: str = Form(...),
+    file: UploadFile = File(...),
+    current_user: UserContext = Depends(get_current_user),
+):
+    contents = await file.read()
+    image_url = await run_in_threadpool(upload_photo, contents, file.content_type, current_user.user_id)
+    product_id = str(uuid.uuid4())
+    await run_in_threadpool(
+        insert_user_product, product_id, current_user.user_id, product_name, image_url, product_theme
+    )
+    return {"product_id": product_id, "image_url": image_url}
 
 
 @router.post("/email-list-upload")

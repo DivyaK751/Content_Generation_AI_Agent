@@ -1,3 +1,10 @@
+export interface Product {
+  product_id: string
+  product_name: string
+  image_url: string
+  product_theme: string
+}
+
 export interface UserContext {
   userId: string
   businessName: string
@@ -10,6 +17,7 @@ export interface UserContext {
   targetAudience: string
   instagramHandle: string
   senderEmail: string
+  products?: Product[]
 }
 
 export interface TrendItem {
@@ -107,6 +115,7 @@ export interface BrandKitData {
   sender_name?: string
   sender_email?: string
   sendgrid_api_key?: string
+  products?: Product[]
 }
 
 export interface OnboardingData {

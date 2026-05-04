@@ -206,6 +206,74 @@ def get_campaigns(user_id: str, limit: int = 50) -> list[dict]:
     return result
 
 
+def insert_user_product(product_id: str, user_id: str, product_name: str, image_url: str, product_theme: str) -> None:
+    _PRODUCTS = f"`{settings.GCP_PROJECT_ID}.{settings.BQ_DATASET_USERS}.user_products`"
+    query = f"""
+        INSERT INTO {_PRODUCTS}
+        (product_id, user_id, product_name, image_url, product_theme, created_at)
+        VALUES (@product_id, @user_id, @product_name, @image_url, @product_theme, CURRENT_TIMESTAMP())
+    """
+    job_config = bigquery.QueryJobConfig(query_parameters=[
+        bigquery.ScalarQueryParameter("product_id", "STRING", product_id),
+        bigquery.ScalarQueryParameter("user_id", "STRING", user_id),
+        bigquery.ScalarQueryParameter("product_name", "STRING", product_name),
+        bigquery.ScalarQueryParameter("image_url", "STRING", image_url),
+        bigquery.ScalarQueryParameter("product_theme", "STRING", product_theme),
+    ])
+    client.query(query, job_config=job_config).result()
+
+
+def get_user_products(user_id: str) -> list[dict]:
+    _PRODUCTS = f"`{settings.GCP_PROJECT_ID}.{settings.BQ_DATASET_USERS}.user_products`"
+    query = f"""
+        SELECT product_id, product_name, image_url, product_theme, created_at
+        FROM {_PRODUCTS}
+        WHERE user_id = @user_id
+        ORDER BY created_at ASC
+    """
+    job_config = bigquery.QueryJobConfig(
+        query_parameters=[bigquery.ScalarQueryParameter("user_id", "STRING", user_id)]
+    )
+    rows = list(client.query(query, job_config=job_config).result())
+    return [dict(r) for r in rows]
+
+
+def update_user_product(product_id: str, user_id: str, product_name: str, product_theme: str, image_url: str | None = None) -> None:
+    _PRODUCTS = f"`{settings.GCP_PROJECT_ID}.{settings.BQ_DATASET_USERS}.user_products`"
+    sets = "product_name = @product_name, product_theme = @product_theme"
+    params = [
+        bigquery.ScalarQueryParameter("product_id", "STRING", product_id),
+        bigquery.ScalarQueryParameter("user_id", "STRING", user_id),
+        bigquery.ScalarQueryParameter("product_name", "STRING", product_name),
+        bigquery.ScalarQueryParameter("product_theme", "STRING", product_theme),
+    ]
+    if image_url is not None:
+        sets += ", image_url = @image_url"
+        params.append(bigquery.ScalarQueryParameter("image_url", "STRING", image_url))
+    query = f"UPDATE {_PRODUCTS} SET {sets} WHERE product_id = @product_id AND user_id = @user_id"
+    client.query(query, job_config=bigquery.QueryJobConfig(query_parameters=params)).result()
+
+
+def delete_user_product(product_id: str, user_id: str) -> str | None:
+    """Delete a product row and return its image_url so the caller can remove the GCS file."""
+    _PRODUCTS = f"`{settings.GCP_PROJECT_ID}.{settings.BQ_DATASET_USERS}.user_products`"
+    fetch = f"SELECT image_url FROM {_PRODUCTS} WHERE product_id = @product_id AND user_id = @user_id LIMIT 1"
+    job_config = bigquery.QueryJobConfig(query_parameters=[
+        bigquery.ScalarQueryParameter("product_id", "STRING", product_id),
+        bigquery.ScalarQueryParameter("user_id", "STRING", user_id),
+    ])
+    rows = list(client.query(fetch, job_config=job_config).result())
+    if not rows:
+        return None
+    image_url = rows[0]["image_url"]
+    delete = f"DELETE FROM {_PRODUCTS} WHERE product_id = @product_id AND user_id = @user_id"
+    client.query(delete, job_config=bigquery.QueryJobConfig(query_parameters=[
+        bigquery.ScalarQueryParameter("product_id", "STRING", product_id),
+        bigquery.ScalarQueryParameter("user_id", "STRING", user_id),
+    ])).result()
+    return image_url
+
+
 def update_user(user_id: str, data: dict) -> None:
     if not data:
         return

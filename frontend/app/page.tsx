@@ -11,7 +11,7 @@ export default function LoginPage() {
           <Activity className="text-white w-7 h-7" />
         </div>
 
-        <h1 className="text-2xl font-bold text-gray-900 mb-1">Pulse</h1>
+        <h1 className="text-2xl font-bold text-gray-900 mb-1">BrandBuddy</h1>
         <p className="text-gray-500 text-sm mb-8 leading-relaxed">
           AI-powered Instagram &amp; email content<br />for your small business
         </p>

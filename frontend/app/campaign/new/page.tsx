@@ -5,7 +5,7 @@ import Sidebar from '@/components/Sidebar'
 import ProfilePanel, { type Section } from '@/components/ProfilePanel'
 import BrandKitForm from '@/components/BrandKitForm'
 import { apiPost, apiGet } from '@/lib/api'
-import { getToken } from '@/lib/auth'
+import { getToken, sessionsKey } from '@/lib/auth'
 import type { StoredSession } from '@/lib/types'
 import {
   Send, Loader2, X, ShieldCheck, Check, Wand2, TrendingUp,
@@ -714,9 +714,10 @@ function saveSessionToStorage(threadId: string, msgs: ChatMsg[], contextTitle?: 
       date: new Date().toISOString(),
       messages: msgs as object[],
     }
-    const existing: StoredSession[] = JSON.parse(localStorage.getItem('pulse_sessions') ?? '[]')
+    const key = sessionsKey()
+    const existing: StoredSession[] = JSON.parse(localStorage.getItem(key) ?? '[]')
     const updated = [session, ...existing.filter(s => s.id !== threadId)].slice(0, 20)
-    localStorage.setItem('pulse_sessions', JSON.stringify(updated))
+    localStorage.setItem(key, JSON.stringify(updated))
     window.dispatchEvent(new Event('storage'))
   } catch {
     // localStorage unavailable — ignore
@@ -813,8 +814,10 @@ export default function NewCampaignPage() {
       const token = getToken()
       if (!token) { router.replace('/'); return }
       let res: ApiResponse
+      let currentThreadId = threadId
       if (!threadId) {
         res = await apiPost<ApiResponse>('/campaign/start', { message: text }, token)
+        currentThreadId = res.thread_id!
         setThreadId(res.thread_id!)
       } else if (chatMode === 'refining') {
         res = await apiPost<ApiResponse>('/campaign/refine', {
@@ -832,6 +835,11 @@ export default function NewCampaignPage() {
         res = await apiPost<ApiResponse>('/campaign/reply', { thread_id: threadId, reply: text }, token)
       }
       handleResponse(res)
+      // Save after every AI response so session persists even without publishing
+      setMessages(prev => {
+        if (currentThreadId && prev.length > 0) saveSessionToStorage(currentThreadId, prev)
+        return prev
+      })
     } catch {
       addMsg({ from: 'ai', kind: 'text', text: 'Something went wrong. Please try again.' })
     } finally {
@@ -856,6 +864,10 @@ export default function NewCampaignPage() {
         reply: JSON.stringify(trend),
       }, token)
       handleResponse(res)
+      setMessages(prev => {
+        if (threadId && prev.length > 0) saveSessionToStorage(threadId, prev)
+        return prev
+      })
     } catch {
       addMsg({ from: 'ai', kind: 'text', text: 'Something went wrong. Please try again.' })
     } finally {
@@ -874,6 +886,10 @@ export default function NewCampaignPage() {
         reply: 'fetch more trends',
       }, token)
       handleResponse(res)
+      setMessages(prev => {
+        if (threadId && prev.length > 0) saveSessionToStorage(threadId, prev)
+        return prev
+      })
     } catch {
       addMsg({ from: 'ai', kind: 'text', text: 'Something went wrong. Please try again.' })
     } finally {
@@ -924,7 +940,11 @@ export default function NewCampaignPage() {
   }
 
   const handleNewCampaign = () => {
-    setMessages([])
+    // Save current session before clearing so it appears in Recent Sessions
+    setMessages(prev => {
+      if (threadId && prev.length > 0) saveSessionToStorage(threadId, prev)
+      return []
+    })
     setInput('')
     setThreadId(null)
     setLoading(false)

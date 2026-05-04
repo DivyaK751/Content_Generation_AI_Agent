@@ -477,6 +477,7 @@ def _gemini_flash_image(prompt: str, asset_url: str, count: int = 3) -> list[byt
                 "- Embed the actual logo image — do not replace it with text or a drawn shape.\n\n"
                 f"{prompt}\n\n"
                 "FINAL CHECK — every item below MUST be true before outputting the image:\n"
+                "[ ] Square 1:1 format — no wide/landscape canvas, no side panels\n"
                 "[ ] Logo graphic from the attached image is VISIBLE in a corner or edge — REQUIRED\n"
                 "[ ] Logo has NO white/filled background — transparent blend only\n"
                 "[ ] Brand name appears as text overlay\n"
@@ -495,6 +496,7 @@ def _gemini_flash_image(prompt: str, asset_url: str, count: int = 3) -> list[byt
                     ],
                     config=types.GenerateContentConfig(
                         response_modalities=["IMAGE", "TEXT"],
+                        image_config=types.ImageConfig(aspect_ratio="1:1"),
                     ),
                 )
                 return resp
@@ -636,6 +638,7 @@ def _edit_image_with_gemini(
         config=types.GenerateContentConfig(
             response_modalities=["IMAGE"],
             temperature=0.3,
+            image_config=types.ImageConfig(aspect_ratio="1:1"),
         ),
     )
     for candidate in response.candidates:
@@ -739,6 +742,167 @@ def _run_image_edit_agent(state: GraphState) -> list[str]:
     return urls
 
 
+# ── Product image generation ──────────────────────────────────────────────────
+
+def _image_prompt_product(ctx, brief: dict, product: dict) -> str:
+    """Product still-life composition prompt.
+
+    TWO images attached: Image 1 = product (sole subject), Image 2 = brand logo (corner).
+    Uses positive-only framing — describes exactly what the scene contains, which
+    naturally crowds out clutter (people, figures, busy backgrounds).
+    """
+    theme = brief.get("title") or brief.get("event", "")
+    brand_angle = brief.get("brand_angle", "") or brief.get("notes", "")
+    headline = _strip_markdown(brief.get("headline", ""))
+    product_name = product.get("product_name", "")
+    product_theme = product.get("product_theme", "")
+    theme_color_name = _hex_to_color_name(product_theme) if product_theme else ""
+
+    atmosphere = brand_angle or theme
+    accent_line = (
+        f"Accent color for text and design highlights: {theme_color_name} ({product_theme})."
+        if product_theme else ""
+    )
+
+    lines = [
+        f"Product advertisement image for {ctx.business_name}, a {ctx.industry} brand. Square 1:1 format.",
+        "",
+        "IMAGES PROVIDED:",
+        "• Image 1 = PRODUCT — composite this exact product photo as the sole main subject.",
+        "• Image 2 = BRAND LOGO — place in one corner (~10% width), transparent background, blended into scene.",
+        "",
+        "COMPOSITION:",
+        "  Style: product still-life photography. The product is the single, central subject of the image.",
+        f"  The product (Image 1) is placed front and center, large, sharp, occupying the majority of the frame.",
+        f"  Background: '{atmosphere}' mood expressed through environmental atmosphere —",
+        "  soft bokeh, atmospheric lighting, textures, and colors that convey the mood.",
+        "  The background is softer/blurred so the product remains the clear focal point.",
+        "",
+        "TEXT (all text floats directly on the image — embedded in the scene, seated on natural contrast):",
+        f"  Brand name '{ctx.business_name}': largest text, placed along top or bottom edge.",
+        f"  Tagline '{ctx.tagline}': smaller, placed near brand name." if ctx.tagline else "",
+        f"  Product label '{product_name}': elegant text near the product." if product_name else "",
+        f"  Marketing copy: {headline}" if headline else "",
+        "  Text sits on the image itself — use a subtle dark area or gradient for legibility.",
+        "  Text is styled as clean overlays; the image has a unified look with no filled panels or strips.",
+        "",
+        accent_line,
+        f"Visual quality: {ctx.image_style or 'Photorealistic'}, high production value, Instagram-ready.",
+        "Single square canvas (1:1). Fully filled background — zero transparent areas. No side panels or collage layout.",
+    ]
+    return "\n".join(l for l in lines if l)
+
+
+def _gemini_flash_image_product(prompt: str, logo_url: str, product_image_url: str) -> list[bytes]:
+    """Generate one marketing image: product as hero (Image 1) + logo in corner (Image 2).
+
+    Product is passed first so the model weights it as the primary visual reference.
+    Both are loaded via authenticated GCS client.
+    """
+    product_bytes, product_mime = read_gcs_bytes(product_image_url)
+    logo_bytes, logo_mime = read_gcs_bytes(logo_url)
+    if product_mime not in _ALLOWED_MIME_TYPES:
+        product_mime = "image/jpeg"
+    if logo_mime not in _ALLOWED_MIME_TYPES:
+        logo_mime = "image/png"
+
+    logger.info(
+        f"[CONTENT GEN ▶] Product Gemini call — "
+        f"product ({len(product_bytes)} bytes, {product_mime}), "
+        f"logo ({len(logo_bytes)} bytes, {logo_mime})"
+    )
+
+    full_prompt = (
+        "OUTPUT FORMAT (follow strictly):\n"
+        "Generate ONE single square image (1:1 aspect ratio, e.g. 1024×1024).\n"
+        "- Do NOT create a collage, side-by-side layout, multi-panel, or diptych.\n"
+        "- The entire canvas must be fully filled — scene, gradient, or solid color. Zero transparent pixels.\n"
+        "- Everything (product, logo, text) must be composited INSIDE this single square frame.\n\n"
+        + prompt +
+        "\n\nFINAL CHECK — all must be true:\n"
+        "[ ] Single square image — no side panels, no transparency\n"
+        "[ ] Product (Image 1) is the hero visual, composited INSIDE the frame\n"
+        "[ ] Logo (Image 2) is INSIDE the frame in a corner, blended into the scene\n"
+        "[ ] Brand name, tagline, and product label appear as text overlays\n"
+        "[ ] No instruction labels visible as text in the image"
+    )
+
+    def _do_generate(fp=full_prompt, pb=product_bytes, pm=product_mime, lb=logo_bytes, lm=logo_mime):
+        return _client.models.generate_content(
+            model=_GEMINI_FLASH_IMAGE,
+            contents=[
+                types.Part(inline_data=types.Blob(mime_type=pm, data=pb)),  # Image 1: product (hero)
+                types.Part(inline_data=types.Blob(mime_type=lm, data=lb)),  # Image 2: logo (corner)
+                types.Part(text=fp),
+            ],
+            config=types.GenerateContentConfig(
+                response_modalities=["IMAGE", "TEXT"],
+                image_config=types.ImageConfig(aspect_ratio="1:1"),
+            ),
+        )
+
+    response = _call_with_backoff(_do_generate)
+    results = []
+    for candidate in response.candidates:
+        for part in candidate.content.parts:
+            if getattr(part, "inline_data", None):
+                results.append(part.inline_data.data)
+                break
+            elif hasattr(part, "text") and part.text:
+                logger.warning(f"[CONTENT GEN ▶] Product Gemini returned text (no image): {part.text[:300]!r}")
+    if not results:
+        raise ValueError("No image parts in Gemini Flash product response")
+    return results
+
+
+def _run_image_generate_product_agent(state: GraphState) -> list[str]:
+    """Generate exactly 3 product images, cycling through products if fewer than 3."""
+    ctx = state["user_context"]
+    brief = state.get("selected_trend") or state.get("occasion_brief") or {}
+    selected_products = state.get("selected_products", [])
+    brand_asset_url = ctx.logo_gcs_url or ctx.image_url
+
+    if not brand_asset_url:
+        logger.warning("[CONTENT GEN ▶] Product mode — no brand asset URL, falling back to normal generation")
+        return _run_image_generate_agent(state)
+
+    TARGET = 3
+    products_to_generate = [selected_products[i % len(selected_products)] for i in range(TARGET)]
+
+    urls: list[str] = []
+    for i, product in enumerate(products_to_generate):
+        if i > 0:
+            logger.info(f"[CONTENT GEN ▶] Product image {i+1} — waiting 15s (rate limit)")
+            time.sleep(15)
+
+        product_image_url = product.get("image_url", "")
+        logger.info(
+            f"[CONTENT GEN ▶] Generating product image {i+1}/{TARGET} "
+            f"for '{product.get('product_name')}'"
+        )
+
+        prompt = _image_prompt_product(ctx, brief, product)
+        try:
+            image_bytes_list = _gemini_flash_image_product(prompt, brand_asset_url, product_image_url)
+        except GeminiRateLimitError:
+            raise
+        except Exception as exc:
+            logger.error(f"[CONTENT GEN ▶] Product image gen FAILED for product {i+1} — {type(exc).__name__}: {exc}")
+            logger.warning(f"[CONTENT GEN ▶] Falling back to normal generation (no product image) for product {i+1}")
+            try:
+                image_bytes_list = _gemini_flash_image(prompt, brand_asset_url)
+            except Exception as exc2:
+                logger.error(f"[CONTENT GEN ▶] Fallback also failed ({exc2}) — skipping product {i+1}")
+                continue
+
+        if image_bytes_list:
+            url = upload_generated_image(image_bytes_list[0], ctx.user_id)
+            logger.info(f"[CONTENT GEN ▶] Product image {i+1} uploaded: {url[:60]}")
+            urls.append(url)
+
+    return urls
+
+
 # ── Node ──────────────────────────────────────────────────────────────────────
 
 def content_generator_node(state: GraphState) -> dict:
@@ -775,9 +939,19 @@ def content_generator_node(state: GraphState) -> dict:
     if "instagram" in channels:
         if regen_image:
             existing_images = state.get("generated_images") or []
+            use_product = state.get("use_product", False)
+            selected_products = state.get("selected_products", [])
             use_edit_mode = bool(existing_images) and iteration > 0
 
-            if use_edit_mode:
+            if use_product and selected_products and not existing_images:
+                # Product mode — first run — generate one image per selected product
+                logger.info(f"[CONTENT GEN ▶] Product mode — generating 3 product image(s) from {len(selected_products)} product(s)")
+                try:
+                    updates["generated_images"] = _run_image_generate_product_agent(state)
+                except GeminiRateLimitError:
+                    logger.warning("[CONTENT GEN ▶] Rate limit on product image generation — falling back to Imagen")
+                    updates["generated_images"] = _run_image_generate_agent(state, force_imagen=True)
+            elif use_edit_mode:
                 logger.info("[CONTENT GEN ▶] Edit mode — modifying existing images")
                 updates["generated_images"] = _run_image_edit_agent(state)
             else:

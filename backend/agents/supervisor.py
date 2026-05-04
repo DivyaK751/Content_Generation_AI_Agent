@@ -529,3 +529,65 @@ def channels_clarify_node(state: GraphState) -> dict:
 
     logger.info(f"[CHANNELS ▶] Resolved channels: {channels}")
     return {"channels": channels}
+
+
+# ── Product clarify ────────────────────────────────────────────────────────────
+
+_PRODUCT_SELECT_PROMPT = """The user wants to create a campaign. They have {count} products in their catalog.
+Determine which products (if any) they want to feature based on their reply.
+
+PRODUCTS:
+{product_list}
+
+USER REPLY: "{reply}"
+
+Rules:
+- If the user says no / skip / none / without product → return empty list
+- If the user says yes / sure / all → return all product_ids (up to 3)
+- If the user names specific products → match by name and return those product_ids
+- Default (ambiguous yes) → return first 3 product_ids
+
+Return ONLY valid JSON — no markdown:
+{{"selected_ids": ["id1", "id2"]}}"""
+
+
+def product_clarify_node(state: GraphState) -> dict:
+    """Ask the user if they want to feature a product. Single interrupt."""
+    ctx = state["user_context"]
+    products = ctx.products
+
+    logger.info("=" * 60)
+    logger.info(f"[PRODUCT CLARIFY ▶] Node started — {len(products)} products available")
+
+    product_lines = "\n".join(f"  {i+1}. {p.product_name}" for i, p in enumerate(products))
+    question = (
+        f"Would you like to feature a product in this campaign?\n\n"
+        f"Your products:\n{product_lines}\n\n"
+        f"Reply with 'yes' (I'll pick up to 3), name specific products, or 'no' to skip."
+    )
+
+    reply = interrupt({"type": "follow_up", "question": question})
+    reply_text = str(reply).strip()
+    logger.info(f"[PRODUCT CLARIFY ▶] Reply: {reply_text[:80]!r}")
+
+    product_list_str = "\n".join(f"- id={p.product_id} name={p.product_name}" for p in products)
+    prompt = _PRODUCT_SELECT_PROMPT.format(
+        count=len(products),
+        product_list=product_list_str,
+        reply=reply_text,
+    )
+    result = _call_json(prompt, temperature=0.1)
+    selected_ids = result.get("selected_ids", [])
+
+    if not selected_ids:
+        logger.info("[PRODUCT CLARIFY ▶] No product selected — normal flow")
+        return {"use_product": False, "selected_products": []}
+
+    selected_products = [
+        p.model_dump() for p in products if p.product_id in selected_ids
+    ][:3]
+    logger.info(
+        f"[PRODUCT CLARIFY ▶] Selected {len(selected_products)} products: "
+        f"{[p['product_name'] for p in selected_products]}"
+    )
+    return {"use_product": True, "selected_products": selected_products}

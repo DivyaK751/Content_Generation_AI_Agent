@@ -5,6 +5,7 @@ import AppLayout from '@/components/AppLayout'
 import { ArrowLeft, Calendar, Mail, Check, TrendingUp } from 'lucide-react'
 import InstagramIcon from '@/components/InstagramIcon'
 import type { StoredSession } from '@/lib/types'
+import { sessionsKey } from '@/lib/auth'
 
 type ChatMsg = {
   id: string
@@ -35,7 +36,7 @@ export default function SessionDetailPage() {
 
   useEffect(() => {
     try {
-      const all: StoredSession[] = JSON.parse(localStorage.getItem('pulse_sessions') ?? '[]')
+      const all: StoredSession[] = JSON.parse(localStorage.getItem(sessionsKey()) ?? '[]')
       const found = all.find(s => s.id === id)
       if (found) setSession(found)
       else setNotFound(true)

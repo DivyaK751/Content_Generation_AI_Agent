@@ -41,7 +41,7 @@ export default function DashboardPage() {
   const router = useRouter()
   const [campaigns, setCampaigns] = useState<Campaign[]>([])
   const [businessName, setBusinessName] = useState<string>(
-    () => { try { return localStorage.getItem('pulse_business_name') ?? '' } catch { return '' } }
+    () => { try { return localStorage.getItem('brandbuddy_business_name') ?? '' } catch { return '' } }
   )
   const [loading, setLoading] = useState(true)
 
@@ -57,7 +57,7 @@ export default function DashboardPage() {
         setCampaigns(campaignData.campaigns)
         const name = kitData.business_name ?? ''
         setBusinessName(name)
-        try { if (name) localStorage.setItem('pulse_business_name', name) } catch {}
+        try { if (name) localStorage.setItem('brandbuddy_business_name', name) } catch {}
       })
       .catch(() => {})
       .finally(() => setLoading(false))

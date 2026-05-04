@@ -64,3 +64,7 @@ class GraphState(TypedDict, total=False):
 
     # Human review chat loop — set by human_review_node, answered by human_review_chat_node
     chat_question: Optional[str]
+
+    # Product featuring (set by product_clarify_node)
+    use_product: Optional[bool]      # None = not asked yet, True/False = user answered
+    selected_products: list          # list of Product dicts (up to 3)
