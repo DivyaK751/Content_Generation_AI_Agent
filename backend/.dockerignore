@@ -1,0 +1,12 @@
+__pycache__/
+*.pyc
+*.pyo
+.env
+.env.*
+credentials/
+*.json
+*.p12
+*.pem
+.DS_Store
+.git
+.gitignore

@@ -37,30 +37,53 @@ function platformLabel(channels: string[]): string {
   return '—'
 }
 
+const STATS_CACHE_KEY = 'brandbuddy_dashboard_stats'
+
+function readCachedStats(): { campaigns: Campaign[]; businessName: string } | null {
+  try {
+    const raw = localStorage.getItem(STATS_CACHE_KEY)
+    if (!raw) return null
+    return JSON.parse(raw)
+  } catch { return null }
+}
+
+function writeCachedStats(campaigns: Campaign[], businessName: string) {
+  try {
+    localStorage.setItem(STATS_CACHE_KEY, JSON.stringify({ campaigns, businessName }))
+  } catch {}
+}
+
 export default function DashboardPage() {
   const router = useRouter()
-  const [campaigns, setCampaigns] = useState<Campaign[]>([])
+
+  const cached = typeof window !== 'undefined' ? readCachedStats() : null
+  const [campaigns, setCampaigns] = useState<Campaign[]>(cached?.campaigns ?? [])
   const [businessName, setBusinessName] = useState<string>(
-    () => { try { return localStorage.getItem('brandbuddy_business_name') ?? '' } catch { return '' } }
+    cached?.businessName
+    ?? (() => { try { return localStorage.getItem('brandbuddy_business_name') ?? '' } catch { return '' } })()
   )
-  const [loading, setLoading] = useState(true)
+  // Only show skeleton on first ever load (no cache)
+  const [loading, setLoading] = useState(!cached)
 
   useEffect(() => {
     const token = getToken()
     if (!token) { router.replace('/'); return }
 
-    Promise.all([
+    // Fetch independently — brand-kit failure must not zero out campaign counts
+    Promise.allSettled([
       apiGet<{ campaigns: Campaign[] }>('/campaigns', token),
       apiGet<BrandKit>('/brand-kit', token),
-    ])
-      .then(([campaignData, kitData]) => {
-        setCampaigns(campaignData.campaigns)
-        const name = kitData.business_name ?? ''
-        setBusinessName(name)
-        try { if (name) localStorage.setItem('brandbuddy_business_name', name) } catch {}
-      })
-      .catch(() => {})
-      .finally(() => setLoading(false))
+    ]).then(([campaignResult, kitResult]) => {
+      const freshCampaigns =
+        campaignResult.status === 'fulfilled' ? campaignResult.value.campaigns : campaigns
+      const name =
+        kitResult.status === 'fulfilled' ? (kitResult.value.business_name ?? businessName) : businessName
+
+      setCampaigns(freshCampaigns)
+      setBusinessName(name)
+      writeCachedStats(freshCampaigns, name)
+      try { if (name) localStorage.setItem('brandbuddy_business_name', name) } catch {}
+    }).finally(() => setLoading(false))
   }, [router])
 
   const igCount = campaigns.filter(c => parseChannels(c.channels).includes('instagram')).length

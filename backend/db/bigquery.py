@@ -274,13 +274,24 @@ def delete_user_product(product_id: str, user_id: str) -> str | None:
     return image_url
 
 
+_TIMESTAMP_FIELDS = {"billing_cycle_start", "created_at", "updated_at"}
+
+
 def update_user(user_id: str, data: dict) -> None:
     if not data:
         return
-    set_clauses = ", ".join(f"{k} = @{k}" for k in data)
-    set_clauses += ", updated_at = CURRENT_TIMESTAMP()"
-    params = [bigquery.ScalarQueryParameter("user_id", "STRING", user_id)] + [
-        bigquery.ScalarQueryParameter(k, "STRING", str(v)) for k, v in data.items()
-    ]
-    query = f"UPDATE {_TABLE} SET {set_clauses} WHERE user_id = @user_id"
+    # Skip None values — use explicit NULL clauses instead
+    non_null = {k: v for k, v in data.items() if v is not None}
+    null_keys = [k for k, v in data.items() if v is None]
+
+    set_parts = [f"{k} = @{k}" for k in non_null]
+    set_parts += [f"{k} = NULL" for k in null_keys]
+    set_parts.append("updated_at = CURRENT_TIMESTAMP()")
+
+    params = [bigquery.ScalarQueryParameter("user_id", "STRING", user_id)]
+    for k, v in non_null.items():
+        bq_type = "TIMESTAMP" if k in _TIMESTAMP_FIELDS else "STRING"
+        params.append(bigquery.ScalarQueryParameter(k, bq_type, str(v)))
+
+    query = f"UPDATE {_TABLE} SET {', '.join(set_parts)} WHERE user_id = @user_id"
     client.query(query, job_config=bigquery.QueryJobConfig(query_parameters=params)).result()

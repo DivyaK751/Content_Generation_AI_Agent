@@ -7,6 +7,9 @@ import BrandKitForm from './BrandKitForm'
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const [profileOpen, setProfileOpen] = useState(false)
   const [activeSection, setActiveSection] = useState<Section | null>(null)
+  const businessName = typeof window !== 'undefined'
+    ? (localStorage.getItem('brandbuddy_business_name') ?? '')
+    : ''
 
   const handleBrandKitToggle = () => {
     setProfileOpen(o => {
@@ -25,6 +28,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         open={profileOpen}
         activeSection={activeSection}
         onSectionSelect={setActiveSection}
+        businessName={businessName}
       />
       <div className="flex-1 overflow-auto">
         {activeSection

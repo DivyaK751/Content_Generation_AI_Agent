@@ -1,5 +1,6 @@
 import logging
 import uuid
+from datetime import datetime
 from fastapi import APIRouter, Depends, Form, HTTPException, UploadFile, File
 from pydantic import BaseModel
 from starlette.concurrency import run_in_threadpool
@@ -55,7 +56,9 @@ def get_brand_kit(current_user: UserContext = Depends(get_current_user)):
     if not row:
         return current_user
     valid = UserContext.model_fields.keys()
-    fresh = UserContext(**{k: v for k, v in row.items() if k in valid})
+    def _coerce(v):
+        return v.isoformat() if isinstance(v, datetime) else v
+    fresh = UserContext(**{k: _coerce(v) for k, v in row.items() if k in valid and _coerce(v) is not None})
     # Load products too — they're not in the users table
     product_rows = get_user_products(current_user.user_id)
     fresh = fresh.model_copy(update={"products": [Product(**p) for p in product_rows]})

@@ -13,6 +13,7 @@ class Settings(BaseSettings):
     BQ_DATASET_USERS: str = "social_content_agent"
     GCS_BUCKET_NAME: str = "social-content-agent-assets"
     FRONTEND_URL: str = "http://localhost:3000"
+    APP_ENV: str = "development"
 
 
 settings = Settings()

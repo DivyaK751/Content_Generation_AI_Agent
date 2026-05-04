@@ -5,9 +5,10 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from config import settings
-from routers import auth, onboarding, brand_kit, campaign
+from routers import auth, onboarding, brand_kit, campaign, subscriptions
 
-os.environ.setdefault("OAUTHLIB_INSECURE_TRANSPORT", "1")  # allow HTTP in local dev
+if os.environ.get("APP_ENV") != "production":
+    os.environ.setdefault("OAUTHLIB_INSECURE_TRANSPORT", "1")  # allow HTTP in local dev
 
 logging.basicConfig(
     level=logging.INFO,
@@ -34,6 +35,7 @@ app.include_router(auth.router)
 app.include_router(onboarding.router)
 app.include_router(brand_kit.router)
 app.include_router(campaign.router)
+app.include_router(subscriptions.router)
 
 
 @app.get("/health")

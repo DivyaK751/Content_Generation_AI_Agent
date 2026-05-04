@@ -105,7 +105,7 @@ Write a SHORT (2–3 sentence), warm, conversational message asking only for:
 2. Any products or services they want to spotlight (optional)
 3. Any personal visual preference beyond the usual event mood (optional)
 
-Be natural. Do not use bullet points. Reference the business type and event by name to make it feel personal.
+Be natural. Do not use bullet points. Reference the business type and event in the body of the message to make it feel personal, but do NOT open with "Hi [business name]" or use the business name as a salutation — just dive into the question warmly.
 
 Return ONLY the message text, nothing else."""
 

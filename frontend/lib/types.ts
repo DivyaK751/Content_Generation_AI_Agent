@@ -1,3 +1,83 @@
+// ── Subscription / Plan types ──────────────────────────────────────────────────
+
+export type PlanName = 'free' | 'starter' | 'growth' | 'pro'
+
+export const PLAN_LIMITS: Record<PlanName, number> = {
+  free: 30,
+  starter: 150,
+  growth: 400,
+  pro: 1000,
+}
+
+export const PLAN_PRICES: Record<PlanName, number> = {
+  free: 0,
+  starter: 19,
+  growth: 49,
+  pro: 99,
+}
+
+export interface PlanFeature {
+  label: string
+  included: boolean
+}
+
+export const PLAN_FEATURES: Record<PlanName, PlanFeature[]> = {
+  free: [
+    { label: '30 images lifetime', included: true },
+    { label: 'Caption + hashtag generation', included: false },
+    { label: 'Auto-post to Instagram', included: false },
+    { label: 'Brand kit', included: false },
+    { label: 'Post scheduling', included: false },
+    { label: 'Analytics', included: false },
+    { label: 'Competitor insights', included: false },
+    { label: 'Credit protection', included: false },
+  ],
+  starter: [
+    { label: '150 images / month', included: true },
+    { label: 'Caption + hashtag generation', included: true },
+    { label: 'Auto-post to Instagram', included: true },
+    { label: 'Brand kit', included: true },
+    { label: 'Basic analytics', included: true },
+    { label: 'Post scheduling', included: false },
+    { label: 'Full analytics', included: false },
+    { label: 'Competitor insights', included: false },
+    { label: 'Credit protection', included: false },
+  ],
+  growth: [
+    { label: '400 images / month', included: true },
+    { label: 'Caption + hashtag generation', included: true },
+    { label: 'Auto-post to Instagram', included: true },
+    { label: 'Brand kit', included: true },
+    { label: 'Basic analytics', included: true },
+    { label: 'Post scheduling', included: true },
+    { label: 'Full analytics', included: true },
+    { label: 'Competitor insights', included: false },
+    { label: 'Credit protection', included: false },
+  ],
+  pro: [
+    { label: '1,000 images / month', included: true },
+    { label: 'Caption + hashtag generation', included: true },
+    { label: 'Auto-post to Instagram', included: true },
+    { label: 'Brand kit', included: true },
+    { label: 'Full analytics', included: true },
+    { label: 'Post scheduling', included: true },
+    { label: 'Competitor insights', included: true },
+    { label: 'Credit protection (bad image refund)', included: true },
+  ],
+}
+
+export interface SubscriptionStatus {
+  plan: PlanName
+  plan_status: string
+  images_used: number
+  images_limit: number
+  billing_cycle_start: string | null
+  can_post_instagram: boolean
+  can_schedule: boolean
+}
+
+// ── Domain types ───────────────────────────────────────────────────────────────
+
 export interface Product {
   product_id: string
   product_name: string

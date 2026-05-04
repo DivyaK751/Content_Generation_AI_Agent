@@ -189,7 +189,10 @@ def publisher_node(state: GraphState) -> dict:
     logger.info(f"[PUBLISHER ▶] Selected caption (first 80 chars): {str(caption)[:80]!r}")
 
     # ── Instagram ──
-    if "instagram" in channels and image_url and caption:
+    if "instagram" in channels and not ctx.can_post_instagram:
+        ig_result = {"skipped": True, "reason": "Plan upgrade required for Instagram posting"}
+        logger.warning("[PUBLISHER ▶] Instagram skipped — plan does not include Instagram posting")
+    elif "instagram" in channels and image_url and caption:
         logger.info("[PUBLISHER ▶] Posting to Instagram via Meta Graph API v19.0")
         ig_result = _post_instagram(image_url, caption, ctx)
         logger.info(f"[PUBLISHER ▶] Instagram result: {ig_result}")

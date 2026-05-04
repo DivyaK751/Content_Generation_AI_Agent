@@ -1,6 +1,5 @@
 'use client'
 import { FileText, ImageIcon, Palette, BookOpen, Users, AtSign, Mail, Camera } from 'lucide-react'
-import { mockUser } from '@/lib/mock-data'
 
 export type Section = 'summary' | 'logos' | 'colors' | 'guidelines' | 'audience' | 'instagram' | 'email' | 'photos'
 
@@ -19,9 +18,10 @@ interface Props {
   open: boolean
   activeSection: Section | null
   onSectionSelect: (s: Section) => void
+  businessName?: string
 }
 
-export default function ProfilePanel({ open, activeSection, onSectionSelect }: Props) {
+export default function ProfilePanel({ open, activeSection, onSectionSelect, businessName }: Props) {
   return (
     <div
       className="flex-shrink-0 overflow-hidden bg-white border-r border-gray-200 flex flex-col min-h-screen"
@@ -31,7 +31,7 @@ export default function ProfilePanel({ open, activeSection, onSectionSelect }: P
         <>
           <div className="px-4 py-4 border-b border-gray-100 flex-shrink-0">
             <p className="text-sm font-semibold text-gray-900">Brand Kit</p>
-            <p className="text-xs text-gray-400 mt-0.5 truncate">{mockUser.businessName}</p>
+            <p className="text-xs text-gray-400 mt-0.5 truncate">{businessName || '—'}</p>
           </div>
           <nav className="flex-1 overflow-y-auto py-2">
             {BRAND_SECTIONS.map(({ key, label, Icon }) => (

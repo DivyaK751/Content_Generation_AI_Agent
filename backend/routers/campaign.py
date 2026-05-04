@@ -10,6 +10,7 @@ from langgraph.types import Command
 from agents.graph import graph
 from agents.publisher import _META_API
 from db.bigquery import get_campaigns
+from db.usage import check_quota, PLAN_LIMITS
 from dependencies import get_current_user
 from models.user import UserContext
 
@@ -91,6 +92,19 @@ def start_campaign(
     body: StartRequest,
     current_user: UserContext = Depends(get_current_user),
 ):
+    if not current_user.can_post_instagram and "instagram" in body.message.lower():
+        raise HTTPException(
+            status_code=403,
+            detail={"code": "instagram_not_available", "message": "Instagram posting requires a Starter plan or above.", "upgrade_url": "/pricing"},
+        )
+
+    allowed, used, limit = check_quota(current_user.user_id, current_user.plan)
+    if not allowed:
+        raise HTTPException(
+            status_code=402,
+            detail={"code": "quota_exceeded", "used": used, "limit": limit, "plan": current_user.plan, "upgrade_url": "/pricing"},
+        )
+
     thread_id = str(uuid.uuid4())
     config = _config(thread_id, current_user.user_id)
     result = _run(
@@ -123,6 +137,13 @@ def refine_campaign(
     current_user: UserContext = Depends(get_current_user),
 ):
     """User clicked Refine — send instruction back to supervisor."""
+    allowed, used, limit = check_quota(current_user.user_id, current_user.plan)
+    if not allowed:
+        raise HTTPException(
+            status_code=402,
+            detail={"code": "quota_exceeded", "used": used, "limit": limit, "plan": current_user.plan, "upgrade_url": "/pricing"},
+        )
+
     config = _config(body.thread_id, current_user.user_id)
     if not graph.get_state(config).values:
         raise HTTPException(404, "Campaign thread not found")

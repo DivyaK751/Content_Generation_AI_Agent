@@ -10,7 +10,7 @@ import type { StoredSession } from '@/lib/types'
 import {
   Send, Loader2, X, ShieldCheck, Check, Wand2, TrendingUp,
   Calendar, RefreshCw, Mail, ExternalLink, ChevronDown, ChevronUp, ArrowRight,
-  Heart, MessageCircle, Bookmark,
+  Heart, MessageCircle, Bookmark, ArrowUpCircle,
 } from 'lucide-react'
 import InstagramIcon from '@/components/InstagramIcon'
 
@@ -308,7 +308,7 @@ function PreviewPublishModal({
                 <div className="flex items-center gap-2.5 px-3 py-2.5">
                   <div className="w-8 h-8 rounded-full bg-gradient-to-br from-purple-500 via-pink-500 to-orange-400 p-0.5 flex-shrink-0">
                     <div className="w-full h-full rounded-full bg-white flex items-center justify-center">
-                      <span className="text-[10px] font-bold text-pink-600">P</span>
+                      <span className="text-[10px] font-bold text-pink-600">{businessName ? businessName[0].toUpperCase() : 'P'}</span>
                     </div>
                   </div>
                   <p className="text-xs font-semibold text-gray-900">{businessName || 'your_business'}</p>
@@ -745,6 +745,7 @@ export default function NewCampaignPage() {
   const [profileOpen, setProfileOpen] = useState(false)
   const [activeBrandSection, setActiveBrandSection] = useState<Section | null>(null)
   const [businessName, setBusinessName] = useState('')
+  const [upgradePrompt, setUpgradePrompt] = useState<'instagram' | 'quota' | null>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
 
@@ -840,7 +841,14 @@ export default function NewCampaignPage() {
         if (currentThreadId && prev.length > 0) saveSessionToStorage(currentThreadId, prev)
         return prev
       })
-    } catch {
+    } catch (err: unknown) {
+      const raw = err instanceof Error ? err.message : ''
+      try {
+        const parsed = JSON.parse(raw)
+        const code = parsed?.detail?.code
+        if (code === 'instagram_not_available') { setUpgradePrompt('instagram'); return }
+        if (code === 'quota_exceeded') { setUpgradePrompt('quota'); return }
+      } catch {}
       addMsg({ from: 'ai', kind: 'text', text: 'Something went wrong. Please try again.' })
     } finally {
       setLoading(false)
@@ -977,7 +985,7 @@ export default function NewCampaignPage() {
         onProfileClick={() => { if (profileOpen) setActiveBrandSection(null); setProfileOpen(o => !o) }}
         profilePanelOpen={profileOpen}
       />
-      <ProfilePanel open={profileOpen} activeSection={activeBrandSection} onSectionSelect={setActiveBrandSection} />
+      <ProfilePanel open={profileOpen} activeSection={activeBrandSection} onSectionSelect={setActiveBrandSection} businessName={businessName} />
 
       {activeBrandSection ? (
         <div className="flex-1 overflow-auto">
@@ -1027,6 +1035,50 @@ export default function NewCampaignPage() {
                     />
                   ))}
                   {loading && <TypingIndicator />}
+
+                  {/* Upgrade prompts */}
+                  {upgradePrompt === 'quota' && (
+                    <div className="flex justify-start">
+                      <div className="flex items-start gap-2.5 max-w-[90%]">
+                        <div className="w-7 h-7 bg-indigo-100 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
+                          <span className="text-indigo-700 font-bold text-xs">P</span>
+                        </div>
+                        <div className="bg-amber-50 border border-amber-200 px-4 py-4 rounded-2xl rounded-tl-sm space-y-3">
+                          <p className="text-sm font-semibold text-amber-800">Image quota reached</p>
+                          <p className="text-sm text-amber-700">You&apos;ve used all your images for this period. Upgrade to keep generating.</p>
+                          <button
+                            onClick={() => router.push('/pricing')}
+                            className="flex items-center gap-2 bg-indigo-600 text-white text-sm font-semibold px-4 py-2 rounded-lg hover:bg-indigo-700 transition-colors"
+                          >
+                            <ArrowUpCircle className="w-4 h-4" />
+                            Upgrade your plan
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {upgradePrompt === 'instagram' && (
+                    <div className="flex justify-start">
+                      <div className="flex items-start gap-2.5 max-w-[90%]">
+                        <div className="w-7 h-7 bg-indigo-100 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
+                          <span className="text-indigo-700 font-bold text-xs">P</span>
+                        </div>
+                        <div className="bg-indigo-50 border border-indigo-200 px-4 py-4 rounded-2xl rounded-tl-sm space-y-3">
+                          <p className="text-sm font-semibold text-indigo-800">Instagram posting not available</p>
+                          <p className="text-sm text-indigo-700">Auto-posting to Instagram requires the Starter plan or above.</p>
+                          <button
+                            onClick={() => router.push('/pricing')}
+                            className="flex items-center gap-2 bg-indigo-600 text-white text-sm font-semibold px-4 py-2 rounded-lg hover:bg-indigo-700 transition-colors"
+                          >
+                            <ArrowUpCircle className="w-4 h-4" />
+                            See pricing
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
                   <div ref={bottomRef} />
                 </div>
               </div>

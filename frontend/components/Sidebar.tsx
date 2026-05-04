@@ -1,10 +1,11 @@
 'use client'
 import { useRouter, usePathname } from 'next/navigation'
 import { useState, useEffect } from 'react'
-import { Activity, LayoutDashboard, FolderOpen, User, LogOut, PlusCircle, Clock } from 'lucide-react'
+import { Activity, LayoutDashboard, FolderOpen, User, LogOut, PlusCircle, Clock, CreditCard } from 'lucide-react'
 import { apiGet } from '@/lib/api'
 import { getToken, sessionsKey, clearToken } from '@/lib/auth'
 import type { StoredSession } from '@/lib/types'
+import UsageBar from '@/components/UsageBar'
 
 function initials(name: string): string {
   const parts = name.trim().split(/\s+/)
@@ -150,7 +151,8 @@ export default function Sidebar({ onProfileClick, profilePanelOpen }: SidebarPro
       </nav>
 
       {/* Bottom nav */}
-      <div className="px-3 py-4 border-t border-gray-100 space-y-0.5 flex-shrink-0">
+      <div className="px-3 py-4 border-t border-gray-100 space-y-2 flex-shrink-0">
+        <UsageBar />
         <button
           onClick={() => onProfileClick ? onProfileClick() : router.push('/profile')}
           className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all ${
@@ -161,6 +163,17 @@ export default function Sidebar({ onProfileClick, profilePanelOpen }: SidebarPro
         >
           <User className="w-4 h-4 flex-shrink-0" />
           Brand Kit
+        </button>
+        <button
+          onClick={() => router.push('/billing')}
+          className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all ${
+            isActive('/billing')
+              ? 'bg-indigo-600 text-white'
+              : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+          }`}
+        >
+          <CreditCard className="w-4 h-4 flex-shrink-0" />
+          Billing
         </button>
         <button
           onClick={() => { clearToken(); router.push('/') }}

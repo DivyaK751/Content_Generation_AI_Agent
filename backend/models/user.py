@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, computed_field
 from typing import Optional
 
 
@@ -47,6 +47,20 @@ class UserContext(BaseModel):
     sendgrid_api_key: Optional[str] = None
     # Products (loaded separately from user_products table)
     products: list[Product] = []
+    # Subscription / plan
+    plan: str = "free"
+    plan_status: str = "active"
+    billing_cycle_start: Optional[str] = None
+
+    @computed_field  # type: ignore[misc]
+    @property
+    def can_post_instagram(self) -> bool:
+        return self.plan in ("starter", "growth", "pro")
+
+    @computed_field  # type: ignore[misc]
+    @property
+    def can_schedule(self) -> bool:
+        return self.plan in ("growth", "pro")
 
 
 class OnboardingForm(BaseModel):

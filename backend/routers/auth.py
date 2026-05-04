@@ -8,7 +8,8 @@ from google_auth_oauthlib.flow import Flow
 from jose import jwt
 
 from config import settings
-from db.bigquery import get_user_by_email, insert_user
+from db.bigquery import get_user_by_email, insert_user, update_user
+from db.usage import init_free_usage
 from dependencies import get_current_user
 from models.user import UserContext
 
@@ -79,6 +80,8 @@ async def google_callback(code: str, state: str):
     else:
         user_id = str(uuid.uuid4())
         insert_user(user_id, email)
+        update_user(user_id, {"plan": "free", "plan_status": "active"})
+        init_free_usage(user_id)
         is_new = True
 
     token = _make_jwt(user_id)

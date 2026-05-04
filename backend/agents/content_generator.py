@@ -10,6 +10,7 @@ from google.genai import types
 
 from config import settings
 from db.storage import upload_generated_image, read_gcs_bytes
+from db.usage import check_quota, increment_usage, PLAN_LIMITS
 from agents.state import GraphState
 
 logger = logging.getLogger(__name__)
@@ -906,6 +907,23 @@ def _run_image_generate_product_agent(state: GraphState) -> list[str]:
 # ── Node ──────────────────────────────────────────────────────────────────────
 
 def content_generator_node(state: GraphState) -> dict:
+    ctx = state["user_context"]
+    allowed, used, limit = check_quota(ctx.user_id, ctx.plan)
+    if not allowed:
+        logger.warning(f"[CONTENT GEN ▶] Quota exceeded for user {ctx.user_id}: {used}/{limit}")
+        return {
+            "approval_result": {
+                "passed": False,
+                "score": 0,
+                "notes": f"Image quota exhausted ({used}/{limit} images used). Please upgrade your plan.",
+                "fix_instruction": "__quota_exceeded__",
+                "per_item": [],
+            },
+            "regenerate_image": False,
+            "regenerate_caption": False,
+            "regenerate_email": False,
+        }
+
     channels = state.get("channels", [])
     iteration = state.get("iteration_count", 0)
     regen_image = state.get("regenerate_image", True)
@@ -999,6 +1017,21 @@ def content_generator_node(state: GraphState) -> dict:
     updates["selected_image_for_refine"] = None
     updates["last_refine_instruction"] = last_refine_instruction
     updates["last_edited_image_index"] = last_edited_image_index
+
+    # Count images generated this iteration
+    new_images = updates.get("generated_images") or []
+    if new_images:
+        is_approval_retry = not is_fresh_user_refine and iteration > 0
+        if ctx.plan == "pro" and is_approval_retry:
+            # Pro plan: don't charge quota for approval retries (credit protection)
+            image_count = 0
+        elif is_fresh_user_refine or last_edited_image_index is not None:
+            image_count = 1
+        else:
+            image_count = len(new_images)
+        if image_count > 0:
+            increment_usage(ctx.user_id, image_count)
+            logger.info(f"[CONTENT GEN ▶] Counted {image_count} image(s) against quota for user {ctx.user_id}")
 
     logger.info("[CONTENT GEN ▶] Node complete")
     return updates
