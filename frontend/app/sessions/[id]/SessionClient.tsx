@@ -35,9 +35,13 @@ export default function SessionDetailPage() {
   const [notFound, setNotFound] = useState(false)
 
   useEffect(() => {
+    // Static export serves /_/index.html for all /sessions/<uuid> paths via nginx
+    // catch-all, so useParams() may return '_' instead of the real UUID.
+    // Read the actual id from the URL as the authoritative source.
+    const urlId = window.location.pathname.split('/sessions/')[1]?.replace(/\/$/, '') || id
     try {
       const all: StoredSession[] = JSON.parse(localStorage.getItem(sessionsKey()) ?? '[]')
-      const found = all.find(s => s.id === id)
+      const found = all.find(s => s.id === urlId)
       if (found) setSession(found)
       else setNotFound(true)
     } catch {

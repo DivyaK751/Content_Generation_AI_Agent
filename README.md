@@ -11,53 +11,6 @@ Multi-agent AI pipeline for Instagram and email marketing automation.
 
 ---
 
-## Agent Architecture
-
-```mermaid
-%%{init: {'theme': 'default'}}%%
-flowchart TD
-    START([Start]) --> supervisor
-
-    supervisor -->|chat / off-topic / follow-up| supervisor_clarify:::interrupt
-    supervisor_clarify:::interrupt -->|re-classify| supervisor
-
-    supervisor -->|mode = occasion| occasion_gather:::interrupt
-    occasion_gather:::interrupt -->|channels unknown| channels_clarify:::interrupt
-    occasion_gather:::interrupt -->|has products| product_clarify:::interrupt
-    occasion_gather:::interrupt -->|ready| content_generator
-
-    supervisor -->|channels unknown| channels_clarify:::interrupt
-    channels_clarify:::interrupt -->|mode = trend| trend_fetch
-    channels_clarify:::interrupt -->|has products| product_clarify:::interrupt
-    channels_clarify:::interrupt -->|ready| content_generator
-
-    supervisor -->|mode = trend| trend_fetch
-    trend_fetch --> trend_select:::interrupt
-    trend_select:::interrupt -->|fetch more| trend_fetch
-    trend_select:::interrupt -->|has products| product_clarify:::interrupt
-    trend_select:::interrupt -->|ready| content_generator
-
-    product_clarify:::interrupt --> content_generator
-    supervisor -->|refine path| content_generator
-
-    content_generator --> approval
-    approval -->|failed & iter < 5| content_generator
-    approval -->|passed or iter ≥ 5| human_review:::interrupt
-
-    human_review:::interrupt -->|chat question| human_review_chat:::interrupt
-    human_review_chat:::interrupt --> human_review:::interrupt
-    human_review:::interrupt -->|refine instruction| supervisor
-    human_review:::interrupt -->|publish| publisher
-
-    publisher --> END([End])
-
-    classDef interrupt stroke:#f90,stroke-width:2px,stroke-dasharray:5 5
-```
-
-Nodes with dashed orange borders pause the pipeline and surface state to the frontend. The user resumes by POSTing to `/campaign/reply`.
-
----
-
 ## Running Locally
 
 ### Backend
@@ -107,3 +60,63 @@ npm run dev   # http://localhost:3000
 | Splitter + Researcher + Synthesizer | Apr 20 | `backend/agents/trend_analyzer.py` | `trend_fetch_node` uses Gemini 2.5 Pro + Google Search to discover 6 current trends; `trend_select_node` synthesizes the chosen trend into `brand_angle`, `headline`, and `visual_direction` |
 | Tool Calling | Feb 16 | `backend/agents/publisher.py` | Calls Meta Graph API (create container → publish) and SendGrid as external tools; polls Instagram container status asynchronously with a 60-second deadline |
 | Effort-Tiered Model Selection | Apr 27 | `backend/agents/content_generator.py` | `gemini-2.5-flash-lite` for intent classification, `gemini-2.5-flash` for image editing, `gemini-2.5-pro` for generation and evaluation |
+
+---
+
+## Agent Architecture
+
+### What each agent does
+
+| Agent | File | What it does |
+|---|---|---|
+| **Supervisor** | `backend/agents/supervisor.py` | The entry point for every campaign. Reads the user's message and decides what kind of request it is — trend-based post, occasion-based post, or a clarifying question. Asks follow-ups if anything is unclear before passing control to the right agent. |
+| **Trend Analyzer** | `backend/agents/trend_analyzer.py` | Uses Gemini + live Google Search to find 6 trending topics relevant to the business. Presents them to the user, waits for a pick, then translates the chosen trend into a creative direction (headline, visual style, brand angle). |
+| **Content Generator** | `backend/agents/content_generator.py` | The creative engine. Takes the brand kit and the chosen trend or occasion and produces 3 Instagram images (via Imagen 4.0), 3 captions, and 3 email drafts. If the approval agent rejects any item, it regenerates only the flagged ones using the feedback provided. |
+| **Approval** | `backend/agents/approval.py` | Automatically grades every piece of content before the user sees it. Uses Gemini 2.5 Pro as a judge — hard fails anything missing the logo or brand name, then scores tone, relevance, and safety. Failed content goes back to the generator with specific fix instructions (up to 5 retries). |
+| **Human Review** | `backend/agents/human_review.py` | Pauses the pipeline and hands control to the user. The user picks their preferred image, caption, and email, or asks for a refinement. Also handles inline questions (e.g. "make the caption shorter") without restarting the whole pipeline. |
+| **Publisher** | `backend/agents/publisher.py` | Takes the user's selected content and posts it. Uploads the image to Instagram via the Meta Graph API, waits for it to finish processing, then publishes it. Sends the email via SendGrid. Saves the campaign record to BigQuery. |
+
+### Flow diagram
+
+```mermaid
+%%{init: {'theme': 'default'}}%%
+flowchart TD
+    START([Start]) --> supervisor
+
+    supervisor -->|chat / off-topic / follow-up| supervisor_clarify:::interrupt
+    supervisor_clarify:::interrupt -->|re-classify| supervisor
+
+    supervisor -->|mode = occasion| occasion_gather:::interrupt
+    occasion_gather:::interrupt -->|channels unknown| channels_clarify:::interrupt
+    occasion_gather:::interrupt -->|has products| product_clarify:::interrupt
+    occasion_gather:::interrupt -->|ready| content_generator
+
+    supervisor -->|channels unknown| channels_clarify:::interrupt
+    channels_clarify:::interrupt -->|mode = trend| trend_fetch
+    channels_clarify:::interrupt -->|has products| product_clarify:::interrupt
+    channels_clarify:::interrupt -->|ready| content_generator
+
+    supervisor -->|mode = trend| trend_fetch
+    trend_fetch --> trend_select:::interrupt
+    trend_select:::interrupt -->|fetch more| trend_fetch
+    trend_select:::interrupt -->|has products| product_clarify:::interrupt
+    trend_select:::interrupt -->|ready| content_generator
+
+    product_clarify:::interrupt --> content_generator
+    supervisor -->|refine path| content_generator
+
+    content_generator --> approval
+    approval -->|failed & iter < 5| content_generator
+    approval -->|passed or iter ≥ 5| human_review:::interrupt
+
+    human_review:::interrupt -->|chat question| human_review_chat:::interrupt
+    human_review_chat:::interrupt --> human_review:::interrupt
+    human_review:::interrupt -->|refine instruction| supervisor
+    human_review:::interrupt -->|publish| publisher
+
+    publisher --> END([End])
+
+    classDef interrupt stroke:#f90,stroke-width:2px,stroke-dasharray:5 5
+```
+
+Nodes with dashed orange borders pause the pipeline and surface state to the frontend. The user resumes by POSTing to `/campaign/reply`.
