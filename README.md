@@ -26,7 +26,7 @@ The platform enables businesses to move seamlessly from idea → content → app
 | Requirement | Status |
 |---|---|
 | **Uses an agent framework** | Built on LangGraph `StateGraph` — 12 nodes wired in `backend/agents/graph.py`, each node a pure Python function in the agent loop |
-| **Deployed and accessible via URL** | Live at https://brandbuddy-frontend-510506868826.us-central1.run.app (frontend on Cloud Run; backend at `brandbuddy-backend-510506868826.us-central1.run.app`) |
+| **Deployed and accessible via URL** | Live at https://brandbuddy-frontend-510506868826.us-central1.run.app  |
 | **Original — not a refactor of Project 1 or 2** | Built from scratch; new domain (marketing automation), new stack (LangGraph + Vertex AI + Meta API + SendGrid), no code carried over from prior projects |
 | **Incorporates three+ concepts from class** | 12 concepts documented with file references in the Course Concepts table below (Router/Orchestrator, Generator-Critic, Human-in-the-Loop, Model-as-a-Judge, Context Engineering, and more) |
 | **Live demo + slides** | Slides: [Canva deck](https://www.canva.com/design/DAHImPY9Lf8/QcMIEv7-N5LtZuFscG2kUQ/edit?ui=eyJBIjp7fX0) |
