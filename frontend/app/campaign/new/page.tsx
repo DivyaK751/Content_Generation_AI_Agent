@@ -746,6 +746,7 @@ export default function NewCampaignPage() {
   const [activeBrandSection, setActiveBrandSection] = useState<Section | null>(null)
   const [businessName, setBusinessName] = useState('')
   const [upgradePrompt, setUpgradePrompt] = useState<'instagram' | 'quota' | null>(null)
+  const [sessionTitle, setSessionTitle] = useState<string | undefined>(undefined)
   const bottomRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
 
@@ -761,6 +762,12 @@ export default function NewCampaignPage() {
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages, loading])
+
+  useEffect(() => {
+    if (threadId && messages.length > 0) {
+      saveSessionToStorage(threadId, messages, sessionTitle)
+    }
+  }, [messages, threadId, sessionTitle])
 
   const addMsg = (msg: Omit<ChatMsg, 'id'>) => {
     const id = crypto.randomUUID()
@@ -836,11 +843,6 @@ export default function NewCampaignPage() {
         res = await apiPost<ApiResponse>('/campaign/reply', { thread_id: threadId, reply: text }, token)
       }
       handleResponse(res)
-      // Save after every AI response so session persists even without publishing
-      setMessages(prev => {
-        if (currentThreadId && prev.length > 0) saveSessionToStorage(currentThreadId, prev)
-        return prev
-      })
     } catch (err: unknown) {
       const raw = err instanceof Error ? err.message : ''
       try {
@@ -872,10 +874,6 @@ export default function NewCampaignPage() {
         reply: JSON.stringify(trend),
       }, token)
       handleResponse(res)
-      setMessages(prev => {
-        if (threadId && prev.length > 0) saveSessionToStorage(threadId, prev)
-        return prev
-      })
     } catch {
       addMsg({ from: 'ai', kind: 'text', text: 'Something went wrong. Please try again.' })
     } finally {
@@ -894,10 +892,6 @@ export default function NewCampaignPage() {
         reply: 'fetch more trends',
       }, token)
       handleResponse(res)
-      setMessages(prev => {
-        if (threadId && prev.length > 0) saveSessionToStorage(threadId, prev)
-        return prev
-      })
     } catch {
       addMsg({ from: 'ai', kind: 'text', text: 'Something went wrong. Please try again.' })
     } finally {
@@ -929,12 +923,9 @@ export default function NewCampaignPage() {
       }, token)
       const publishData = res.data as PublishResult
       const contextTitle = publishData?.theme ?? undefined
+      if (contextTitle) setSessionTitle(contextTitle)
       handleResponse(res)
       setSelectedContent(null)
-      setMessages(prev => {
-        saveSessionToStorage(threadId, prev, contextTitle)
-        return prev
-      })
     } catch {
       addMsg({ from: 'ai', kind: 'text', text: 'Publish failed. Please try again.' })
     } finally {
@@ -948,11 +939,8 @@ export default function NewCampaignPage() {
   }
 
   const handleNewCampaign = () => {
-    // Save current session before clearing so it appears in Recent Sessions
-    setMessages(prev => {
-      if (threadId && prev.length > 0) saveSessionToStorage(threadId, prev)
-      return []
-    })
+    if (threadId && messages.length > 0) saveSessionToStorage(threadId, messages, sessionTitle)
+    setMessages([])
     setInput('')
     setThreadId(null)
     setLoading(false)
@@ -964,6 +952,7 @@ export default function NewCampaignPage() {
     setActiveTrendMsgId(null)
     setPanelCaptions([])
     setPanelEmails([])
+    setSessionTitle(undefined)
   }
 
   const panelOpen = selectedContent !== null && stage === 'content-shown'

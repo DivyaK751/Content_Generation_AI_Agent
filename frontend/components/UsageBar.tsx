@@ -37,11 +37,12 @@ export function invalidateUsageCache() {
 
 export default function UsageBar() {
   const router = useRouter()
-  const [status, setStatus] = useState<SubscriptionStatus | null>(
-    typeof window !== 'undefined' ? readCached() : null
-  )
+  const [status, setStatus] = useState<SubscriptionStatus | null>(null)
 
   useEffect(() => {
+    const cached = readCached()
+    if (cached) setStatus(cached)
+
     const token = getToken()
     if (!token) return
     fetch(`${API_URL}/subscription/status`, {

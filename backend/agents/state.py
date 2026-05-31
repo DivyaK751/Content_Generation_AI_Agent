@@ -68,3 +68,6 @@ class GraphState(TypedDict, total=False):
     # Product featuring (set by product_clarify_node)
     use_product: Optional[bool]      # None = not asked yet, True/False = user answered
     selected_products: list          # list of Product dicts (up to 3)
+
+    # Conversation history for context-aware intent classification
+    conversation_history: list[dict]  # [{"role": "user"|"assistant", "content": "..."}]

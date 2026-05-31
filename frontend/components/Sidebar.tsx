@@ -28,17 +28,17 @@ export default function Sidebar({ onProfileClick, profilePanelOpen }: SidebarPro
   const router = useRouter()
   const pathname = usePathname()
   const [sessions, setSessions] = useState<StoredSession[]>([])
-  const [businessName, setBusinessName] = useState<string>(
-    () => { try { return localStorage.getItem('brandbuddy_business_name') ?? '' } catch { return '' } }
-  )
-  const [industry, setIndustry] = useState<string>(
-    () => { try { return localStorage.getItem('brandbuddy_business_industry') ?? '' } catch { return '' } }
-  )
+  const [businessName, setBusinessName] = useState<string>('')
+  const [industry, setIndustry] = useState<string>('')
 
   useEffect(() => {
     function load() {
       try {
         setSessions(JSON.parse(localStorage.getItem(sessionsKey()) ?? '[]'))
+        const name = localStorage.getItem('brandbuddy_business_name') ?? ''
+        const ind = localStorage.getItem('brandbuddy_business_industry') ?? ''
+        if (name) setBusinessName(name)
+        if (ind) setIndustry(ind)
       } catch { setSessions([]) }
     }
     load()
